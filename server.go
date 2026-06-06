@@ -29,7 +29,7 @@ func main() {
 	log.Println("⚡ Webhook escuchando en:  http://localhost:" + port + "/webhook")
 	log.Println("🖥️ Monitor disponible en: http://localhost:" + port + "/monitor")
 	
-	err := http.ListenAndServe(":"+port, nil)
+	err := http.ListenAndServe("0.0.0.0:"+port, nil)
 	if err != nil {
 		log.Fatalf("CRITICAL ERROR: El servidor colapsó: %v\n", err)
 	}

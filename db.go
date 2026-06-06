@@ -25,15 +25,15 @@ func InitDB() {
 	// Iniciamos el pool de conexiones
 	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
 	if err != nil {
-		log.Fatalf("ERROR: No se pudo conectar a PostgreSQL: %v", err)
+		log.Printf("ERROR: No se pudo conectar a PostgreSQL: %v", err)
+	} else {
+		// Asignamos a la variable global DB (usada en webhook.go, bot.go y monitor.go)
+		DB = pool
+		log.Println("SUCCESS: Conexión a PostgreSQL (pgxpool) establecida exitosamente.")
+
+		// Validar e inicializar la base de datos del MVP
+		crearTablasAutomaticas()
 	}
-
-	// Asignamos a la variable global DB (usada en webhook.go, bot.go y monitor.go)
-	DB = pool
-	log.Println("SUCCESS: Conexión a PostgreSQL (pgxpool) establecida exitosamente.")
-
-	// Validar e inicializar la base de datos del MVP
-	crearTablasAutomaticas()
 }
 
 func crearTablasAutomaticas() {
