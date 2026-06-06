@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor Cocina - SUSHI LOSPLEBES</title>
+    <style>
+        body {
+            font-family: monospace;
+            background-color: #f4f4f4;
+            color: #111;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            border-bottom: 2px solid #111;
+            padding-bottom: 10px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .card {
+            background: #fff;
+            border: 2px solid #111;
+            padding: 15px;
+            box-shadow: 4px 4px 0 #111;
+        }
+        .card h2 {
+            margin-top: 0;
+            font-size: 1.2em;
+            border-bottom: 1px dashed #111;
+            padding-bottom: 5px;
+        }
+        .card p {
+            margin: 5px 0;
+            line-height: 1.4;
+        }
+        .badge {
+            background: #111;
+            color: #fff;
+            padding: 2px 6px;
+            font-weight: bold;
+        }
+        /* Hidden iframe for thermal printing */
+        #printFrame {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>MONITOR COCINA - SUSHI LOSPLEBES [ACTIVO]</h1>
+    <div class="grid" id="pedidosContainer">
+        <p id="loadingMsg">Conectado. Esperando nuevas órdenes del bot...</p>
+    </div>
+
+    <iframe id="printFrame"></iframe>
+
+    <script>
+        const formatTicket = (pedido) => {
+            // Helpers strictly for 32 chars ESC/POS styling
+            const padRight = (str, len) => str.length >= len ? str.substring(0,len) : str + ' '.repeat(len - str.length);
+            const padLeft = (str, len) => str.length >= len ? str.substring(0,len) : ' '.repeat(len - str.length) + str;
+            const center = (str, len) => {
+                if (str.length >= len) return str.substring(0, len);
+                const left = Math.floor((len - str.length) / 2);
+                const right = len - str.length - left;
+                return ' '.repeat(left) + str + ' '.repeat(right);
+            };
+
+            let ticket = "\n";
+            ticket += center("SUSHI LOSPLEBES", 32) + "\n";
+            ticket += center("RFC: SPL190101XYZ", 32) + "\n";
+            ticket += center("Ticket de Venta", 32) + "\n";
+            ticket += "-".repeat(32) + "\n";
+            ticket += padRight("Orden ID: " + pedido.id, 32) + "\n";
+            ticket += padRight("Cliente: " + pedido.nombre, 32) + "\n";
+            ticket += padRight("Tel: " + pedido.telefono, 32) + "\n";
+            
+            const isPickup = typeof pedido.direccion_entrega === "string" && pedido.direccion_entrega.includes("PICKUP");
+            ticket += isPickup 
+                      ? padRight("Tipo: PARA LLEVAR (PICKUP)", 32) + "\n" 
+                      : padRight("Tipo: SERVICIO A DOMICILIO", 32) + "\n";
+
+            ticket += "-".repeat(32) + "\n";
+            ticket += padRight("1x Detalles del pedido:", 32) + "\n";
+            
+            // Text wrap for 32 chars
+            let detalles = pedido.detalles_orden || "Sin detalles";
+            for(let i=0; i<detalles.length; i+=32) {
+                ticket += padRight(detalles.substring(i, i+32), 32) + "\n";
+            }
+
+            ticket += "-".repeat(32) + "\n";
+            ticket += padRight("Total:", 15) + padLeft("$" + parseFloat(pedido.total || 0).toFixed(2), 17) + "\n";
+            ticket += padRight("Pago:", 15) + padLeft(pedido.metodo_pago || "Efectivo", 17) + "\n";
+            
+            if (!isPickup) {
+                ticket += "-".repeat(32) + "\n";
+                ticket += center("DIRECCION ENTREGA", 32) + "\n";
+                let dir = pedido.direccion_entrega;
+                for(let i=0; i<dir.length; i+=32) {
+                    ticket += padRight(dir.substring(i, i+32), 32) + "\n";
+                }
+            }
+
+            ticket += "=".repeat(32) + "\n";
+            ticket += center("IVA INCLUIDO", 32) + "\n";
+            ticket += center("QUEJAS PROFECO: 800 468 8722", 32) + "\n";
+            ticket += center("¡GRACIAS POR TU PREFERENCIA!", 32) + "\n";
+            ticket += "\n\n\n\n\n";
+
+            return ticket;
+        };
+
+        const printTicket = (pedido) => {
+            const ticketText = formatTicket(pedido);
+            const iframe = document.getElementById('printFrame');
+            const doc = iframe.contentWindow.document;
+            
+            doc.open();
+            doc.write('<html><head><style>@page { margin: 0; } body { margin: 0; font-family: monospace; font-size: 14px; white-space: pre-wrap; width: 58mm; overflow: hidden; color: #000; background: #fff; }</style></head><body>');
+            doc.write(ticketText.replace(/</g, "&lt;").replace(/>/g, "&gt;"));
+            doc.write('</body></html>');
+            doc.close();
+
+            // Automatización: focus and print silent triggers
+            setTimeout(() => {
+                iframe.contentWindow.focus();
+                iframe.contentWindow.print();
+            }, 500);
+        };
+
+        const renderCard = (pedido) => {
+            const container = document.getElementById('pedidosContainer');
+            const loadMsg = document.getElementById('loadingMsg');
+            if (loadMsg) loadMsg.remove();
+
+            const isTransfer = (pedido.metodo_pago || "").toUpperCase().includes('TRANSFERENCIA');
+            
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `
+                <h2>Orden #${pedido.id} <span class="badge">${isTransfer ? 'TRANSFERENCIA' : 'EFECTIVO'}</span></h2>
+                <p><strong>Cliente:</strong> ${pedido.nombre}</p>
+                <p><strong>Teléfono:</strong> ${pedido.telefono}</p>
+                <p><strong>Orden:</strong> ${pedido.detalles_orden}</p>
+                <p><strong>Entrega:</strong> ${pedido.direccion_entrega}</p>
+                <p><strong>Pago Ref:</strong> ${pedido.metodo_pago}</p>
+            `;
+            // Insertar al inicio de la grilla
+            container.insertBefore(card, container.firstChild);
+        };
+
+        // Server-Sent Events Init
+        const evtSource = new EventSource("/monitor/stream");
+        
+        evtSource.onmessage = function(event) {
+            try {
+                const pedido = JSON.parse(event.data);
+                console.log("Nueva orden recibida por SSE:", pedido);
+                renderCard(pedido);
+                printTicket(pedido);
+            } catch (err) {
+                console.error("Fallo parseando JSON de Evento SSE:", err);
+            }
+        };
+
+        evtSource.onerror = function() {
+            const loadMsg = document.getElementById('loadingMsg');
+            if (loadMsg) loadMsg.innerText = "Conexión perdida. Reconectando al servidor...";
+            console.error("Conexión perdida con el Monitor Stream SSE. Intentando reconectar...");
+        };
+    </script>
+</body>
+</html>
