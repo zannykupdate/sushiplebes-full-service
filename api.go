@@ -66,7 +66,6 @@ func HandleOrdersAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		
-		nombre, _ := req["nombre"].(string)
 		telefono, _ := req["telefono"].(string)
 		detalles, _ := req["detalles_orden"].(string)
 		direccion, _ := req["direccion_entrega"].(string)
