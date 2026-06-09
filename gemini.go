@@ -23,8 +23,8 @@ type GeminiDecision struct {
 
 type GeminiRequest struct {
 	Contents         []MessageContent `json:"contents"`
-	SystemInstruction *SystemInst     `json:"systemInstruction,omitempty"`
-	GenerationConfig  GenConfig       `json:"generationConfig"`
+	SystemInstruction *SystemInst     `json:"system_instruction,omitempty"`
+	GenerationConfig  GenConfig       `json:"generation_config"`
 }
 
 type MessageContent struct {
@@ -41,7 +41,7 @@ type Part struct {
 }
 
 type GenConfig struct {
-	ResponseMimeType string `json:"responseMimeType"`
+	ResponseMimeType string `json:"response_mime_type"`
 	Temperature      float64 `json:"temperature"`
 }
 
@@ -168,6 +168,19 @@ func CallGemini(phone string, userMessage string) (GeminiDecision, error) {
 	}
 
 	rawJsonText := geminiResp.Candidates[0].Content.Parts[0].Text
+	
+	// Strip possible markdown json formatting
+	rawJsonText = strings.TrimSpace(rawJsonText)
+	if strings.HasPrefix(rawJsonText, "```json") {
+		rawJsonText = strings.TrimPrefix(rawJsonText, "```json")
+	} else if strings.HasPrefix(rawJsonText, "```") {
+		rawJsonText = strings.TrimPrefix(rawJsonText, "```")
+	}
+	if strings.HasSuffix(rawJsonText, "```") {
+		rawJsonText = strings.TrimSuffix(rawJsonText, "```")
+	}
+	rawJsonText = strings.TrimSpace(rawJsonText)
+
 	var decision GeminiDecision
 	if err := json.Unmarshal([]byte(rawJsonText), &decision); err != nil {
 		return GeminiDecision{}, fmt.Errorf("error al mapear gemini a decision json: %v", err)
