@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"text/template"
+	"html/template"
 	"sync"
 )
 

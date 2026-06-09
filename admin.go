@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
-	"text/template"
+	"html/template"
 )
 
 // HandleAdminInterface serves the administrative dashboard panel HTML.
