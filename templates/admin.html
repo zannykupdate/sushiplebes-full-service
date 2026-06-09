@@ -87,13 +87,19 @@
             <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 flex-1">
                 <!-- Tabla de datos (Ocupa espacio completo debajo) -->
                 <section class="xl:col-span-3 bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-                    <h3 class="text-sm font-bold text-gray-800 uppercase tracking-wider mb-6">Stock de Inventario (Básico)</h3>
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+                        <h3 class="text-sm font-bold text-gray-800 uppercase tracking-wider">Stock de Inventario (Básico)</h3>
+                        <button onclick="openInventoryModal()" class="mt-4 sm:mt-0 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-4 rounded-xl transition">
+                            + Añadir Insumo
+                        </button>
+                    </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse">
                             <thead>
                                 <tr class="text-xs text-gray-500 uppercase tracking-wider border-b border-gray-100">
                                     <th class="py-3 px-4 font-semibold">Producto / Insumo</th>
                                     <th class="py-3 px-4 font-semibold">Cantidad Restante</th>
+                                    <th class="py-3 px-4 font-semibold text-right">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody id="inventoryList" class="text-sm font-medium divide-y divide-gray-100">
@@ -104,6 +110,32 @@
                 </section>
             </div>
         </main>
+    </div>
+
+    <!-- Modal for Inventory CRUD -->
+    <div id="inventoryModal" class="fixed inset-0 z-50 hidden bg-gray-900 bg-opacity-50 flex items-center justify-center">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 id="modalTitle" class="text-lg font-bold text-gray-900 mb-4">Añadir Insumo</h3>
+            <form id="inventoryForm" onsubmit="handleInventorySubmit(event)">
+                <input type="hidden" id="isEdit" value="false">
+                <input type="hidden" id="originalItemName" value="">
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Nombre del Insumo / Producto</label>
+                    <input type="text" id="itemName" required placeholder="Ej: arroz 265g" class="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                
+                <div class="mb-6">
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Cantidad Inicial</label>
+                    <input type="number" id="itemQuantity" required value="0" class="w-full border border-gray-300 rounded-lg py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                
+                <div class="flex justify-end gap-3">
+                    <button type="button" onclick="closeInventoryModal()" class="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg transition">Cancelar</button>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition">Guardar</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <!-- Script para alimentar la tabla de forma asíncrona -->
@@ -126,6 +158,10 @@
             }
 
             // Inventory Data
+            await loadInventory();
+        });
+
+        async function loadInventory() {
             try {
                 const res = await fetch('/api/inventory');
                 const items = await res.json();
@@ -139,15 +175,88 @@
                                     ${item.quantity} Uds.
                                 </span>
                             </td>
+                            <td class="py-4 px-4 text-right">
+                                <button onclick="editInventory('${item.item}', ${item.quantity})" class="text-blue-600 hover:text-blue-800 text-sm font-bold mr-3 transition">Editar</button>
+                                <button onclick="deleteInventory('${item.item}')" class="text-red-600 hover:text-red-800 text-sm font-bold transition">Eliminar</button>
+                            </td>
                         </tr>
                     `).join('');
                 } else {
-                    tbody.innerHTML = '<tr><td colspan="2" class="py-4 px-4 text-gray-400 italic">No hay inventario registrado.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="3" class="py-4 px-4 text-gray-400 italic text-center">No hay inventario registrado.</td></tr>';
                 }
             } catch (err) {
                 console.error("Error cargando inventario:", err);
             }
-        });
+        }
+
+        function openInventoryModal() {
+            document.getElementById('modalTitle').innerText = 'Añadir Insumo';
+            document.getElementById('inventoryForm').reset();
+            document.getElementById('isEdit').value = 'false';
+            document.getElementById('originalItemName').value = '';
+            document.getElementById('itemName').disabled = false;
+            document.getElementById('inventoryModal').classList.remove('hidden');
+        }
+
+        function closeInventoryModal() {
+            document.getElementById('inventoryModal').classList.add('hidden');
+        }
+
+        function editInventory(item, quantity) {
+            document.getElementById('modalTitle').innerText = 'Editar Insumo';
+            document.getElementById('itemName').value = item;
+            document.getElementById('itemName').disabled = true; // no permitir cambiar nombre en edición para mantener consistencia
+            document.getElementById('itemQuantity').value = quantity;
+            document.getElementById('isEdit').value = 'true';
+            document.getElementById('originalItemName').value = item;
+            document.getElementById('inventoryModal').classList.remove('hidden');
+        }
+
+        async function handleInventorySubmit(event) {
+            event.preventDefault();
+            const isEdit = document.getElementById('isEdit').value === 'true';
+            const originalItemName = document.getElementById('originalItemName').value;
+            const item = isEdit ? originalItemName : document.getElementById('itemName').value;
+            const quantity = parseFloat(document.getElementById('itemQuantity').value);
+            
+            const payload = { item, quantity };
+            const method = isEdit ? 'PUT' : 'POST';
+
+            try {
+                const res = await fetch('/api/inventory', {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    closeInventoryModal();
+                    await loadInventory();
+                } else {
+                    alert('Error al guardar el inventario');
+                }
+            } catch (error) {
+                console.error(error);
+                alert('Error de conexión');
+            }
+        }
+
+        async function deleteInventory(item) {
+            if (!confirm(`¿Estás seguro de que deseas eliminar "${item}"?`)) return;
+            
+            try {
+                const res = await fetch(`/api/inventory?item=${encodeURIComponent(item)}`, {
+                    method: 'DELETE'
+                });
+                if (res.ok) {
+                    await loadInventory();
+                } else {
+                    alert('Error al eliminar el inventario');
+                }
+            } catch (error) {
+                console.error(error);
+                alert('Error de conexión');
+            }
+        }
     </script>
 </body>
 </html>

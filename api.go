@@ -196,14 +196,19 @@ func HandleInventoryAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		
-		idFloat, ok := req["id"].(float64)
-		if !ok {
-			http.Error(w, `{"error": "Missing or invalid id"}`, http.StatusBadRequest)
+		item, ok := req["item"].(string)
+		if !ok || item == "" {
+			http.Error(w, `{"error": "Missing or invalid item name"}`, http.StatusBadRequest)
 			return
 		}
 		quantity, _ := req["quantity"].(float64)
 
-		_, err := DB.Exec(context.Background(), "UPDATE inventory SET quantity = $1 WHERE id = $2", int(quantity), int(idFloat))
+		// Consolidate: Delete all entries for this item and insert a fresh one with the updated exact quantity
+		_, err := DB.Exec(context.Background(), "DELETE FROM inventory WHERE item = $1", item)
+		if err == nil {
+			_, err = DB.Exec(context.Background(), "INSERT INTO inventory (item, quantity) VALUES ($1, $2)", item, int(quantity))
+		}
+		
 		if err != nil {
 			http.Error(w, `{"error": "Failed to update item"}`, http.StatusInternalServerError)
 			return
@@ -211,14 +216,13 @@ func HandleInventoryAPI(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"message": "Item updated"})
 	
 	case "DELETE":
-		idStr := r.URL.Query().Get("id")
-		id, err := strconv.Atoi(idStr)
-		if err != nil {
-			http.Error(w, `{"error": "Invalid id"}`, http.StatusBadRequest)
+		item := r.URL.Query().Get("item")
+		if item == "" {
+			http.Error(w, `{"error": "Missing item name"}`, http.StatusBadRequest)
 			return
 		}
 		
-		_, err = DB.Exec(context.Background(), "DELETE FROM inventory WHERE id = $1", id)
+		_, err := DB.Exec(context.Background(), "DELETE FROM inventory WHERE item = $1", item)
 		if err != nil {
 			http.Error(w, `{"error": "Failed to delete item"}`, http.StatusInternalServerError)
 			return
