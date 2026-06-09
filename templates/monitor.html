@@ -159,8 +159,10 @@
 
     <div class="header-bar">
         <h1>Monitor Cocina | Comandas</h1>
-        <div style="display: flex; gap: 1rem; align-items: center;">
-            <button class="btn-connect" id="btnConnect" onclick="connectSerialPrinter()">🔌 Conectar Ticketera (Web Serial)</button>
+        <div style="display: flex; gap: 1rem; align-items: center; justify-content: flex-end; flex-wrap: wrap;">
+            <button class="btn-connect" id="btnConnectSerial" onclick="connectSerialPrinter()">🔌 COM Serial</button>
+            <button class="btn-connect" id="btnConnectUSB" onclick="connectUSBPrinter()" style="background-color: #2b5797;">🔌 Direct USB</button>
+            <button class="btn-connect" id="btnPrintTest" onclick="printTest()" style="background-color: #e65100;">🧾 Test Impresión</button>
             <div class="status-badge" id="statusIndicator">🟢 EN LÍNEA (SSE)</div>
         </div>
     </div>
@@ -177,6 +179,8 @@
         // 0. CONEXIÓN WEB SERIAL ESC/POS
         // ==========================================
         let printerWriter = null;
+        let usbPrinterDevice = null;
+        let usbPrinterEndpoint = null;
 
         async function connectSerialPrinter() {
             try {
@@ -188,14 +192,67 @@
                 await port.open({ baudRate: 9600 });
                 printerWriter = port.writable.getWriter();
                 
-                const btn = document.getElementById('btnConnect');
-                btn.innerText = "🖨️ TÍCKETERA CONECTADA";
+                const btn = document.getElementById('btnConnectSerial');
+                btn.innerText = "🖨️ SERIAL CONECTADA";
                 btn.style.backgroundColor = "#2e7d32";
                 btn.style.color = "white";
             } catch (err) {
                 console.error("Error conectando a la impresora serie:", err);
+                alert("Error COM Serial: " + err.message);
             }
         }
+
+        async function connectUSBPrinter() {
+            try {
+                if (!navigator.usb) {
+                    alert("Tu navegador no soporta WebUSB. Usa Google Chrome o Edge.");
+                    return;
+                }
+                // Filtramos por cualquier dispositivo
+                usbPrinterDevice = await navigator.usb.requestDevice({ filters: [] });
+                await usbPrinterDevice.open();
+                
+                if (usbPrinterDevice.configuration === null) {
+                    await usbPrinterDevice.selectConfiguration(1);
+                }
+                await usbPrinterDevice.claimInterface(0);
+
+                let endpointNum = null;
+                for (const endpoint of usbPrinterDevice.configuration.interfaces[0].alternate.endpoints) {
+                    if (endpoint.direction === "out" && endpoint.type === "bulk") {
+                        endpointNum = endpoint.endpointNumber;
+                        break;
+                    }
+                }
+
+                if (!endpointNum) {
+                    throw new Error("No se encontró Endpoint Bulk de escritura en este dispositivo USB.");
+                }
+                
+                usbPrinterEndpoint = endpointNum;
+
+                const btn = document.getElementById('btnConnectUSB');
+                btn.innerText = "🖨️ USB CONECTADO";
+                btn.style.backgroundColor = "#2e7d32";
+                btn.style.color = "white";
+            } catch (err) {
+                console.error("Error conectando USB:", err);
+                alert("Error Direct USB: " + err.message + "\n\nNota: Si ya instalaste los drivers, Windows los bloquea. Debes usar WinUSB (Zadig) o desinstalar el driver genérico en administrados de dispositivos de Windows para que WebUSB funcione.");
+            }
+        }
+
+        const printTest = async () => {
+            const pedidoFake = {
+                id: 999,
+                nombre: "Usuario de Prueba",
+                telefono: "555-555-5555",
+                detalles_orden: "1x TICKET DE PRUEBA",
+                direccion_entrega: "PICKUP",
+                total: "0.00",
+                metodo_pago: "Ninguno"
+            };
+            await printTicket(pedidoFake);
+        };
 
         const normalizeText = (text) => {
             if (!text) return "";
@@ -288,10 +345,21 @@
                     for (const buffer of buffers) {
                         await printerWriter.write(buffer);
                     }
-                    console.log("Impreso via RAW ESC/POS USB/Serial.");
+                    console.log("Impreso via RAW ESC/POS Serial.");
                     return;
                 } catch (err) {
-                    console.error("Error enviando RAW ESC/POS:", err);
+                    console.error("Error enviando RAW ESC/POS Serial:", err);
+                }
+            } else if (usbPrinterDevice && usbPrinterEndpoint) {
+                try {
+                    const buffers = generateEscPosData(pedido);
+                    for (const buffer of buffers) {
+                        await usbPrinterDevice.transferOut(usbPrinterEndpoint, buffer);
+                    }
+                    console.log("Impreso via RAW ESC/POS Direct USB.");
+                    return;
+                } catch (err) {
+                    console.error("Error enviando RAW ESC/POS Direct USB:", err);
                 }
             }
             
