@@ -101,13 +101,35 @@ ESTRUCTURA STRICTA MULTI-PROPOSITO (SIEMPRE RETORNA JSON en responseMimeType="ap
 
 var chatMemory = make(map[string]string)
 
+func callGeminiWithModel(model string, apiKey string, requestBody GeminiRequest) ([]byte, int, error) {
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, apiKey)
+	jsonData, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	return bodyBytes, resp.StatusCode, err
+}
+
 func CallGemini(phone string, userMessage string) (GeminiDecision, error) {
 	apiKey := strings.TrimSpace(strings.Trim(os.Getenv("GEMINI_API_KEY"), "\""))
 	if apiKey == "" {
 		return GeminiDecision{}, fmt.Errorf("GEMINI_API_KEY no configurado")
 	}
-
-	url := "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey
 
 	// Agregar a historial muy básico (limitar a últimos 500 chars para no crecer infinito)
 	historial := chatMemory[phone]
@@ -133,32 +155,29 @@ func CallGemini(phone string, userMessage string) (GeminiDecision, error) {
 		},
 	}
 
-	jsonData, err := json.Marshal(reqData)
-	if err != nil {
-		return GeminiDecision{}, err
+	// Fallback strategy to handle latest models in 2026
+	modelsToTry := []string{"gemini-3.5-flash", "gemini-flash-latest", "gemini-2.5-flash"}
+	var bodyBytes []byte
+	var statusCode int
+	var err error
+
+	for _, model := range modelsToTry {
+		bodyBytes, statusCode, err = callGeminiWithModel(model, apiKey, reqData)
+		if err != nil {
+			return GeminiDecision{}, err
+		}
+		if statusCode == http.StatusOK {
+			break
+		}
+		log.Printf("WARNING Gemini returned %d for model %s: %s", statusCode, model, string(bodyBytes))
+		if statusCode != http.StatusNotFound && statusCode != http.StatusBadRequest {
+			// Si no es un problema del modelo sino de autenticación o quota, salir.
+			break
+		}
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return GeminiDecision{}, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return GeminiDecision{}, err
-	}
-	defer resp.Body.Close()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return GeminiDecision{}, err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		log.Printf("ERROR Gemini Api body: %s", string(bodyBytes))
-	return GeminiDecision{}, fmt.Errorf("gemini status code %d: %s", resp.StatusCode, string(bodyBytes))
+	if statusCode != http.StatusOK {
+		return GeminiDecision{}, fmt.Errorf("todos los intentos a gemini fallaron. ultimo status code %d: %s", statusCode, string(bodyBytes))
 	}
 
 	var geminiResp GeminiResponse
