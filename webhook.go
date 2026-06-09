@@ -1,7 +1,11 @@
 package main
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -24,8 +28,36 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "POST" {
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Printf("ERROR: reading webhook body: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		appSecret := os.Getenv("WHATSAPP_APP_SECRET")
+		if appSecret != "" {
+			signature := r.Header.Get("X-Hub-Signature-256")
+			if signature == "" || len(signature) <= 7 || signature[:7] != "sha256=" {
+				log.Println("ERROR: Invalid or missing X-Hub-Signature-256")
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			
+			mac := hmac.New(sha256.New, []byte(appSecret))
+			mac.Write(bodyBytes)
+			expectedMAC := mac.Sum(nil)
+			expectedSignature := "sha256=" + hex.EncodeToString(expectedMAC)
+
+			if !hmac.Equal([]byte(signature), []byte(expectedSignature)) {
+				log.Println("ERROR: Webhook HMAC signature mismatch")
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+		}
+
 		var payload map[string]interface{}
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		if err := json.Unmarshal(bodyBytes, &payload); err != nil {
 			log.Printf("ERROR: decoding webhook payload: %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
