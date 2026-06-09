@@ -65,18 +65,24 @@ func crearTablasAutomaticas() {
 		direccion_entrega TEXT,
 		metodo_pago VARCHAR(50),
 		total NUMERIC,
-		status VARCHAR(50) DEFAULT 'PENDING'
+		status VARCHAR(50) DEFAULT 'PENDING',
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);
 	CREATE TABLE IF NOT EXISTS earnings (
 		id SERIAL PRIMARY KEY,
 		amount NUMERIC NOT NULL,
-		order_id INT
+		order_id INT,
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);
 	`
 	_, err := DB.Exec(context.Background(), query)
 	if err != nil {
 		log.Printf("ERROR: Fallo inicializando tablas del MVP: %v", err)
 	} else {
+		// Intentando añadir las columnas para dbs existentes
+		DB.Exec(context.Background(), "ALTER TABLE orders ADD COLUMN created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP")
+		DB.Exec(context.Background(), "ALTER TABLE earnings ADD COLUMN created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP")
+		
 		log.Println("SUCCESS: Architectura de motor PostgreSQL y esquemas DDL en línea.")
 	}
 }

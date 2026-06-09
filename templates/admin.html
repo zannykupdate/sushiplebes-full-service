@@ -47,12 +47,28 @@
             </header>
 
             <!-- Responsive Bento Grid -->
-            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 flex-1">
-                <!-- Tarjeta de Ingresos (Ocupa dos columnas en pantallas grandes) -->
-                <section class="xl:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-8 flex flex-col justify-between">
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+                <!-- Tarjeta de Ingresos (Día) -->
+                <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 flex flex-col justify-between">
                     <div>
                         <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Ingresos del Día</h3>
-                        <p class="text-5xl font-black text-gray-900 tracking-tighter" id="totalGanancias">$0.00</p>
+                        <p class="text-3xl font-black text-gray-900 tracking-tighter" id="dailyGanancias">$0.00</p>
+                    </div>
+                </section>
+                
+                <!-- Tarjeta de Ingresos (Semana) -->
+                <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Semana Actual</h3>
+                        <p class="text-3xl font-black text-gray-900 tracking-tighter" id="weeklyGanancias">$0.00</p>
+                    </div>
+                </section>
+
+                <!-- Tarjeta de Ingresos (Mes) -->
+                <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Mes Actual</h3>
+                        <p class="text-3xl font-black text-gray-900 tracking-tighter" id="monthlyGanancias">$0.00</p>
                     </div>
                 </section>
 
@@ -60,13 +76,15 @@
                 <section class="bg-gray-900 rounded-2xl shadow border border-gray-900 p-8 flex flex-col justify-between text-white">
                     <div>
                         <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Órdenes Pendientes</h3>
-                        <p class="text-5xl font-black text-yellow-500 tracking-tighter" id="contadorOrdenes">0</p>
+                        <p class="text-4xl font-black text-yellow-500 tracking-tighter" id="contadorOrdenes">0</p>
                     </div>
                     <div class="mt-8">
-                        <a href="/monitor" target="_blank" class="block text-center bg-yellow-500 text-gray-900 font-bold py-3 px-4 rounded-xl hover:bg-yellow-400 transition">Atender en Monitor &rarr;</a>
+                        <a href="/monitor" target="_blank" class="block text-center bg-yellow-500 text-gray-900 text-sm font-bold py-2 px-4 rounded-xl hover:bg-yellow-400 transition">Ir a Monitor</a>
                     </div>
                 </section>
+            </div>
 
+            <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 flex-1">
                 <!-- Tabla de datos (Ocupa espacio completo debajo) -->
                 <section class="xl:col-span-3 bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
                     <h3 class="text-sm font-bold text-gray-800 uppercase tracking-wider mb-6">Stock de Inventario (Básico)</h3>
@@ -98,7 +116,9 @@
                 
                 if (dashData) {
                     const formatCurrency = (val) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(val);
-                    document.getElementById('totalGanancias').innerText = formatCurrency(dashData.total_ganancias || 0);
+                    document.getElementById('dailyGanancias').innerText = formatCurrency(dashData.daily_ganancias || 0);
+                    document.getElementById('weeklyGanancias').innerText = formatCurrency(dashData.weekly_ganancias || 0);
+                    document.getElementById('monthlyGanancias').innerText = formatCurrency(dashData.monthly_ganancias || 0);
                     document.getElementById('contadorOrdenes').innerText = dashData.pending_orders || 0;
                 }
             } catch (err) {

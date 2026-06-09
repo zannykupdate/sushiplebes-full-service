@@ -30,7 +30,7 @@ func HandleOrdersAPI(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case "GET":
-		rows, err := DB.Query(context.Background(), "SELECT id, nombre, telefono, detalles_orden, direccion_entrega, metodo_pago, total, status FROM orders ORDER BY id DESC")
+		rows, err := DB.Query(context.Background(), "SELECT id, nombre, telefono, detalles_orden, direccion_entrega, metodo_pago, total, status, created_at FROM orders ORDER BY id DESC")
 		if err != nil {
 			log.Printf("ERROR: GET /api/orders failed: %v", err)
 			http.Error(w, `{"error": "Failed to fetch orders"}`, http.StatusInternalServerError)
@@ -43,7 +43,8 @@ func HandleOrdersAPI(w http.ResponseWriter, r *http.Request) {
 			var id int
 			var nombre, telefono, detalles_orden, direccion_entrega, metodo_pago, status string
 			var total float64
-			if err := rows.Scan(&id, &nombre, &telefono, &detalles_orden, &direccion_entrega, &metodo_pago, &total, &status); err != nil {
+			var createdAt time.Time
+			if err := rows.Scan(&id, &nombre, &telefono, &detalles_orden, &direccion_entrega, &metodo_pago, &total, &status, &createdAt); err != nil {
 				continue
 			}
 			orders = append(orders, map[string]interface{}{
@@ -55,7 +56,11 @@ func HandleOrdersAPI(w http.ResponseWriter, r *http.Request) {
 				"metodo_pago":       metodo_pago,
 				"total":             total,
 				"status":            status,
+				"fecha_pedido":      createdAt.Format(time.RFC3339),
 			})
+		}
+		if orders == nil {
+			orders = make([]map[string]interface{}, 0)
 		}
 		json.NewEncoder(w).Encode(orders)
 
@@ -238,20 +243,25 @@ func HandleDashboardAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "GET" {
-		var totalGanancias float64
-		err := DB.QueryRow(context.Background(), "SELECT COALESCE(SUM(amount), 0) FROM earnings").Scan(&totalGanancias)
-		if err != nil {
-			log.Printf("ERROR: GET /api/dashboard failed to sum earnings: %v", err)
-		}
+		var dailyGanancias, weeklyGanancias, monthlyGanancias, totalGanancias float64
+		DB.QueryRow(context.Background(), "SELECT COALESCE(SUM(amount), 0) FROM earnings").Scan(&totalGanancias)
+		
+		// Assuming reasonable local timezone approximation or using UTC standard DATE
+		DB.QueryRow(context.Background(), "SELECT COALESCE(SUM(amount), 0) FROM earnings WHERE created_at >= CURRENT_DATE").Scan(&dailyGanancias)
+		DB.QueryRow(context.Background(), "SELECT COALESCE(SUM(amount), 0) FROM earnings WHERE created_at >= date_trunc('week', CURRENT_DATE)").Scan(&weeklyGanancias)
+		DB.QueryRow(context.Background(), "SELECT COALESCE(SUM(amount), 0) FROM earnings WHERE created_at >= date_trunc('month', CURRENT_DATE)").Scan(&monthlyGanancias)
 
 		var pendingOrders int
-		err = DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM orders WHERE status = 'PENDING'").Scan(&pendingOrders)
+		err := DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM orders WHERE status = 'PENDING'").Scan(&pendingOrders)
 		if err != nil {
 			log.Printf("ERROR: GET /api/dashboard failed to count orders: %v", err)
 		}
 
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"total_ganancias": totalGanancias,
+			"daily_ganancias": dailyGanancias,
+			"weekly_ganancias": weeklyGanancias,
+			"monthly_ganancias": monthlyGanancias,
 			"pending_orders":  pendingOrders,
 		})
 	} else {
