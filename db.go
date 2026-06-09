@@ -12,6 +12,13 @@ import (
 var DB *pgxpool.Pool
 
 func InitDB(databaseURL string) {
+	// Prevenir error "prepared statement already exists" causados por PgBouncer o poolers
+	if !strings.Contains(databaseURL, "?") {
+		databaseURL += "?default_query_exec_mode=exec"
+	} else if !strings.Contains(databaseURL, "default_query_exec_mode") {
+		databaseURL += "&default_query_exec_mode=exec"
+	}
+
 	poolConfig, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		log.Printf("ERROR: Error parsing DATABASE_URL: %v", err)
