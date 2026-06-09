@@ -13,6 +13,7 @@ import (
 
 type GeminiDecision struct {
 	ResponseText      string   `json:"response_text"`
+	SendMenuImage     bool     `json:"send_menu_image"`
 	IsOrderComplete   bool     `json:"is_order_complete"`
 	OrderDetails      string   `json:"order_details"`
 	DeliveryAddress   string   `json:"delivery_address"`
@@ -61,6 +62,7 @@ Tu objetivo es ayudar a los clientes a armar su orden de sushi paso a paso por W
 Reglas de negocio:
 - Un rollo estándar cuesta $120 MXN, un rollo especial $150 MXN (inventa o calcula precios atractivos pero rentables).
 - Si el cliente requiere envío a domicilio, suma SIEMPRE $40 MXN al total, aplica para cualquier lugar.
+- Si el cliente te saluda por primera vez (el historial está vacío o solo tiene un mensaje), DEBES darle la bienvenida al restaurante SUSHI LOSPLEBES de manera muy amable e indicar "send_menu_image" = true en tu JSON para que el sistema le envíe la foto del menú.
 - Métodos de pago aceptados: "Efectivo" o "Transferencia".
 - Si el cliente elige "Transferencia", pásale la CLABE: 012345678912345678 a nombre de SUSHI LOSPLEBES y dile que envíe la foto del comprobante por aquí, su orden será validada por un humano. El "payment_method" en el JSON debe ser "TRANSFERENCIA (Por validar comprobante)".
 - Para lograr "is_order_complete" = true, debes haber recolectado: qué quieren comer, si es para recoger (PICKUP) o enviar a domicilio (con dirección), y el método de pago (Efectivo o Transferencia).
@@ -87,6 +89,7 @@ Cuando el pedido esté completado ("is_order_complete" = true), calcula los insu
 ESTRUCTURA STRICTA MULTI-PROPOSITO (SIEMPRE RETORNA JSON en responseMimeType="application/json"):
 {
   "response_text": "Texto a enviar por WhatsApp.",
+  "send_menu_image": boolean,
   "is_order_complete": boolean,
   "order_details": "Ej: 1x Rollo Empanizado, 1x Té helado. Nota: sin cebollín.",
   "delivery_address": "Calle Falsa 123 o 'PICKUP'",
@@ -104,7 +107,7 @@ func CallGemini(phone string, userMessage string) (GeminiDecision, error) {
 		return GeminiDecision{}, fmt.Errorf("GEMINI_API_KEY no configurado")
 	}
 
-	url := "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" + apiKey
+	url := "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey
 
 	// Agregar a historial muy básico (limitar a últimos 500 chars para no crecer infinito)
 	historial := chatMemory[phone]

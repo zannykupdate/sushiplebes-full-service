@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -51,11 +52,58 @@ func SendWhatsAppMessage(phone string, message string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("ERROR sending WhatsApp msg, status: %d", resp.StatusCode)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		log.Printf("ERROR sending WhatsApp msg, status: %d, body: %s", resp.StatusCode, string(bodyBytes))
 		return fmt.Errorf("error enviando mensaje whatsapp")
 	}
 	
 	log.Printf("SUCCESS: WhatsApp message sent to %s", phone)
+	return nil
+}
+
+func SendWhatsAppImage(phone string, imageUrl string) error {
+	token := strings.TrimSpace(strings.Trim(os.Getenv("WHATSAPP_ACCESS_TOKEN"), "\""))
+	phoneNumberID := strings.TrimSpace(strings.Trim(os.Getenv("WHATSAPP_PHONE_ID"), "\""))
+
+	if token == "" || phoneNumberID == "" || imageUrl == "" {
+		return fmt.Errorf("credenciales faltantes o url vacia")
+	}
+
+	url := fmt.Sprintf("https://graph.facebook.com/v18.0/%s/messages", phoneNumberID)
+
+	payload := map[string]interface{}{
+		"messaging_product": "whatsapp",
+		"to":                phone,
+		"type":              "image",
+		"image": map[string]interface{}{
+			"link": imageUrl,
+		},
+	}
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		log.Printf("ERROR sending WhatsApp image, status: %d, body: %s", resp.StatusCode, string(bodyBytes))
+		return fmt.Errorf("error enviando imagen whatsapp")
+	}
 	return nil
 }
 
@@ -69,8 +117,18 @@ func ProcessMessage(phone string, text string) {
 		return
 	}
 
-	// Responder al usuario lo que Gemini decidió decirles
+	// Enviamos el mensaje de texto primero
 	SendWhatsAppMessage(phone, decision.ResponseText)
+
+	// Enviamos imagen del menú si Gemini lo decide
+	if decision.SendMenuImage {
+		menuUrl := strings.TrimSpace(strings.Trim(os.Getenv("MENU_IMAGE_URL"), "\""))
+		if menuUrl == "" {
+			// Placeholder si no está configurado
+			menuUrl = "https://i.imgur.com/3q17vT9.jpeg" // Imagen ejemplo de sushi
+		}
+		SendWhatsAppImage(phone, menuUrl)
+	}
 
 	if decision.IsOrderComplete {
 		// La orden está lista para meter a Base de datos y Monitor

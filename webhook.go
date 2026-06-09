@@ -96,7 +96,7 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		
 		// Fallback por si la estructura del JSON no es de un mensaje entrante estándar
-		ProcessMessage("Desconocido", "Mensaje sin formato de texto detectado")
+		log.Println("Incoming webhook did not contain a valid text message. Ignored.")
 
 		w.WriteHeader(http.StatusOK)
 		return
