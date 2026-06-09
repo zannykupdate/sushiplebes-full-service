@@ -1,35 +1,54 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
 )
 
 func main() {
-	// 1. Inicializar la Base de Datos al arrancar
-	InitDB()
-	if DB != nil {
-		defer DB.Close()
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL != "" {
+		InitDB(databaseURL)
+	} else {
+		log.Println("WARNING: DATABASE_URL no provista")
 	}
 
-	// 2. Registrar los Enpoints del ecosistema
-	http.HandleFunc("/webhook", WebhookHandler)             // Recibe datos de Meta y dispara el Bot (webhook.go y bot.go)
-	http.HandleFunc("/monitor", HandleMonitorInterface)     // Renderiza la GUI de cocina (monitor.go)
-	http.HandleFunc("/monitor/stream", HandleMonitorStream) // Transmisión SSE asíncrona a la cocina (monitor.go)
+	if DB != nil {
+		if err := DB.Ping(context.Background()); err == nil {
+			log.Println("✅ Verificación de DB: Conexión y Ping exitosos antes de iniciar el servidor.")
+		} else {
+			log.Printf("⚠️ Verificación de DB: El Ping a la base de datos falló: %v\n", err)
+		}
+	} else {
+		log.Println("⚠️ Verificación de DB: Operando sin conexión a base de datos activa (DB es nil).")
+	}
 
-	// 3. Obtener el puerto, manejar fallbacks
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		port = "3000"
 	}
 
-	// 4. Iniciar el servidor
-	log.Printf("🍣 Servidor principal de SUSHI LOSPLEBES unificado e iniciado en el puerto: %s\n", port)
-	log.Println("⚡ Webhook escuchando en:  http://localhost:" + port + "/webhook")
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			http.Redirect(w, r, "/admin", http.StatusFound)
+			return
+		}
+		http.NotFound(w, r)
+	})
+	http.HandleFunc("/webhook", WebhookHandler)
+	http.HandleFunc("/monitor", HandleMonitorInterface)
+	http.HandleFunc("/monitor/stream", HandleMonitorStream)
+	http.HandleFunc("/api/orders", HandleOrdersAPI)
+	http.HandleFunc("/api/inventory", HandleInventoryAPI)
+	http.HandleFunc("/admin", HandleAdminInterface)
+
+	log.Println("⚡ Webhook escuchando en: http://localhost:" + port + "/webhook")
 	log.Println("🖥️ Monitor disponible en: http://localhost:" + port + "/monitor")
+	log.Println("📊 Panel Admin disponible en: http://localhost:" + port + "/admin")
 	
-	err := http.ListenAndServe(":"+port, nil)
+	err := http.ListenAndServe("0.0.0.0:"+port, nil)
 	if err != nil {
 		log.Fatalf("CRITICAL ERROR: El servidor colapsó: %v\n", err)
 	}
