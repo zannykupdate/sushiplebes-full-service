@@ -12,8 +12,8 @@ import (
 )
 
 func SendWhatsAppMessage(phone string, message string) error {
-	token := strings.Trim(os.Getenv("WHATSAPP_ACCESS_TOKEN"), "\"")
-	phoneNumberID := strings.Trim(os.Getenv("WHATSAPP_PHONE_ID"), "\"") // ID del número de origen desde Meta
+	token := strings.TrimSpace(strings.Trim(os.Getenv("WHATSAPP_ACCESS_TOKEN"), "\""))
+	phoneNumberID := strings.TrimSpace(strings.Trim(os.Getenv("WHATSAPP_PHONE_ID"), "\"")) // ID del número de origen desde Meta
 
 	if token == "" || phoneNumberID == "" {
 		log.Println("WARNING: WHATSAPP_ACCESS_TOKEN o WHATSAPP_PHONE_ID no están configurados. No se enviará mensaje real.")

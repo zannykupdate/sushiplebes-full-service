@@ -16,8 +16,8 @@ func basicAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		user := strings.Trim(os.Getenv("ADMIN_USER"), "\"")
-		pass := strings.Trim(os.Getenv("ADMIN_PASS"), "\"")
+		user := strings.TrimSpace(strings.Trim(os.Getenv("ADMIN_USER"), "\""))
+		pass := strings.TrimSpace(strings.Trim(os.Getenv("ADMIN_PASS"), "\""))
 		
 		// If credentials are not set in the environment, fallback to a default or block
 		if user == "" || pass == "" {
@@ -36,7 +36,7 @@ func basicAuth(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func main() {
-	databaseURL := strings.Trim(os.Getenv("DATABASE_URL"), "\"")
+	databaseURL := strings.TrimSpace(strings.Trim(os.Getenv("DATABASE_URL"), "\""))
 	if databaseURL != "" {
 		InitDB(databaseURL)
 	} else {

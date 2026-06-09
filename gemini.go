@@ -99,12 +99,12 @@ ESTRUCTURA STRICTA MULTI-PROPOSITO (SIEMPRE RETORNA JSON en responseMimeType="ap
 var chatMemory = make(map[string]string)
 
 func CallGemini(phone string, userMessage string) (GeminiDecision, error) {
-	apiKey := strings.Trim(os.Getenv("GEMINI_API_KEY"), "\"")
+	apiKey := strings.TrimSpace(strings.Trim(os.Getenv("GEMINI_API_KEY"), "\""))
 	if apiKey == "" {
 		return GeminiDecision{}, fmt.Errorf("GEMINI_API_KEY no configurado")
 	}
 
-	url := "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey
+	url := "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" + apiKey
 
 	// Agregar a historial muy básico (limitar a últimos 500 chars para no crecer infinito)
 	historial := chatMemory[phone]
