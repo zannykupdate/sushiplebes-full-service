@@ -60,41 +60,48 @@ func SendWhatsAppMessage(phone string, message string) error {
 
 func ProcessMessage(phone string, text string) {
 	log.Printf("Bot received message from %s: %s", phone, text)
-	// Example processing: we insert a fake order just to trigger the monitor logic.
 	
-	// Create order and trigger SSE event
-	if DB != nil {
-		id, err := InsertOrder(context.Background(), "Cliente WhatsApp", phone, text, "PICKUP", "EFECTIVO", 150.00)
-		if err == nil {
-			orderData := map[string]interface{}{
-				"id":                id,
-				"nombre":            "Cliente WhatsApp",
-				"telefono":          phone,
-				"detalles_orden":    text,
-				"direccion_entrega": "PICKUP",
-				"metodo_pago":       "EFECTIVO",
-				"total":             150.00,
+	decision, err := CallGemini(phone, text)
+	if err != nil {
+		log.Printf("ERROR from Gemini: %v", err)
+		SendWhatsAppMessage(phone, "¡Ups! Ocurrió un error procesando tu mensaje. Intenta de nuevo.")
+		return
+	}
+
+	// Responder al usuario lo que Gemini decidió decirles
+	SendWhatsAppMessage(phone, decision.ResponseText)
+
+	if decision.IsOrderComplete {
+		// La orden está lista para meter a Base de datos y Monitor
+		if DB != nil {
+			id, err := InsertOrder(context.Background(), phone, decision.OrderDetails, decision.DeliveryAddress, decision.PaymentMethod, decision.Total, decision.InventoryToRemove)
+			if err == nil {
+				orderData := map[string]interface{}{
+					"id":                id,
+					"nombre":            "Cliente " + phone,
+					"telefono":          phone,
+					"detalles_orden":    decision.OrderDetails,
+					"direccion_entrega": decision.DeliveryAddress,
+					"metodo_pago":       decision.PaymentMethod,
+					"total":             decision.Total,
+				}
+				EmitOrder(orderData) // trigger SSE to kitchen
+			} else {
+				log.Printf("ERROR inserting complete order: %v", err)
 			}
-			EmitOrder(orderData) // trigger SSE to kitchen
-			
-			// Try sending a real reply
-			responseMsg := fmt.Sprintf("¡Hola! Hemos recibido tu pedido: '%s'. Se despachará a cocina de inmediato.", text)
-			SendWhatsAppMessage(phone, responseMsg)
 		} else {
-			log.Printf("ERROR inserting order: %v", err)
+			// Fallback local mock
+			orderData := map[string]interface{}{
+				"id":                999,
+				"nombre":            "Cliente Local",
+				"telefono":          phone,
+				"detalles_orden":    decision.OrderDetails,
+				"direccion_entrega": decision.DeliveryAddress,
+				"metodo_pago":       decision.PaymentMethod,
+				"total":             decision.Total,
+			}
+			EmitOrder(orderData)
 		}
-	} else {
-		// Mock order for testing
-		orderData := map[string]interface{}{
-			"id":                999,
-			"nombre":            "Cliente WhatsApp",
-			"telefono":          phone,
-			"detalles_orden":    text,
-			"direccion_entrega": "PICKUP",
-			"metodo_pago":       "EFECTIVO",
-			"total":             150.00,
-		}
-		EmitOrder(orderData)
-		SendWhatsAppMessage(phone, "¡Hola! Esto es una prueba local (sin base de datos). Recibimos tu mensaje.")
 	}
 }
+

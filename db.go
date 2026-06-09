@@ -81,16 +81,33 @@ func crearTablasAutomaticas() {
 	}
 }
 
-func InsertOrder(ctx context.Context, nombre, telefono, detalles, direccion, pago string, total float64) (int, error) {
+func InsertOrder(ctx context.Context, telefono, detalles, direccion, pago string, total float64, inventoryToRemove []string) (int, error) {
 	var id int
 	err := DB.QueryRow(ctx, "INSERT INTO orders (nombre, telefono, detalles_orden, direccion_entrega, metodo_pago, total) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-		nombre, telefono, detalles, direccion, pago, total).Scan(&id)
+		"Cliente "+telefono, telefono, detalles, direccion, pago, total).Scan(&id)
 	
 	if err == nil {
-		// impactar ganancias e inventario de manera super simple
+		// impactar ganancias
 		DB.Exec(ctx, "INSERT INTO earnings (amount, order_id) VALUES ($1, $2)", total, id)
-		if strings.Contains(strings.ToLower(detalles), "arroz") {
-			DB.Exec(ctx, "UPDATE inventory SET quantity = quantity - 1 WHERE item = 'arroz'")
+		
+		// Descontar inventario estructurado por Gemini
+		for _, item := range inventoryToRemove {
+			// El item es algo como "arroz 265g", insertarlo restando en la tabla.
+			// Pero si el sistema real usa items fijos, podemos usar un UPDATE ... WHERE item = 'arroz 265g'.
+			// Ya que es un inventario raw para MVP, dejaremos un log o intentar separar el string.
+			// Como SQLite/Postgres no tiene auto-parseo sin lógica, vamos a insertar los raw como deductivos en una misma tabla 
+			// Si el item existe, bajamos cantidad (asumiendo que parsear raw "arroz 265g" es dificil, mejor restamos 1 a la variable global y guardamos el log).
+			// Forma simplificada:
+			
+			// Extract just the name vs quantity or just insert it raw as an item that was consumed.
+			// The instructions didn't specify table schema exactly other than: id, item, quantity
+			// We can simply add a negative record or do UPSERT.
+			
+			query := `
+				INSERT INTO inventory (item, quantity) 
+				VALUES ($1, -1) 
+				ON CONFLICT (id) DO NOTHING`
+			DB.Exec(ctx, query, item)
 		}
 	}
 	return id, err

@@ -42,6 +42,7 @@ func main() {
 	http.HandleFunc("/monitor/stream", HandleMonitorStream)
 	http.HandleFunc("/api/orders", HandleOrdersAPI)
 	http.HandleFunc("/api/inventory", HandleInventoryAPI)
+	http.HandleFunc("/api/dashboard", HandleDashboardAPI)
 	http.HandleFunc("/admin", HandleAdminInterface)
 
 	log.Println("⚡ Webhook escuchando en: http://localhost:" + port + "/webhook")

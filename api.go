@@ -142,7 +142,7 @@ func HandleInventoryAPI(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case "GET":
-		rows, err := DB.Query(context.Background(), "SELECT id, item, quantity FROM inventory ORDER BY id ASC")
+		rows, err := DB.Query(context.Background(), "SELECT MIN(id) as id, item, SUM(quantity) as quantity FROM inventory GROUP BY item ORDER BY item ASC")
 		if err != nil {
 			log.Printf("ERROR: GET /api/inventory failed: %v", err)
 			http.Error(w, `{"error": "Failed to fetch inventory"}`, http.StatusInternalServerError)
@@ -215,6 +215,41 @@ func HandleInventoryAPI(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"message": "Item deleted"})
 		
 	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func HandleDashboardAPI(w http.ResponseWriter, r *http.Request) {
+	enableCors(&w)
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	if DB == nil {
+		http.Error(w, `{"error": "Database not connected"}`, http.StatusInternalServerError)
+		return
+	}
+
+	if r.Method == "GET" {
+		var totalGanancias float64
+		err := DB.QueryRow(context.Background(), "SELECT COALESCE(SUM(amount), 0) FROM earnings").Scan(&totalGanancias)
+		if err != nil {
+			log.Printf("ERROR: GET /api/dashboard failed to sum earnings: %v", err)
+		}
+
+		var pendingOrders int
+		err = DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM orders WHERE status = 'PENDING'").Scan(&pendingOrders)
+		if err != nil {
+			log.Printf("ERROR: GET /api/dashboard failed to count orders: %v", err)
+		}
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"total_ganancias": totalGanancias,
+			"pending_orders":  pendingOrders,
+		})
+	} else {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }

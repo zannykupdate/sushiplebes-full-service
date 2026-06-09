@@ -91,6 +91,21 @@
     <!-- Script para alimentar la tabla de forma asíncrona -->
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
+            // Dashboard Data
+            try {
+                const resDash = await fetch('/api/dashboard');
+                const dashData = await resDash.json();
+                
+                if (dashData) {
+                    const formatCurrency = (val) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(val);
+                    document.getElementById('totalGanancias').innerText = formatCurrency(dashData.total_ganancias || 0);
+                    document.getElementById('contadorOrdenes').innerText = dashData.pending_orders || 0;
+                }
+            } catch (err) {
+                console.error("Error cargando dashboard:", err);
+            }
+
+            // Inventory Data
             try {
                 const res = await fetch('/api/inventory');
                 const items = await res.json();
