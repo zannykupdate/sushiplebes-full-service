@@ -52,7 +52,9 @@
                 <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 flex flex-col justify-between">
                     <div>
                         <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Ingresos del Día</h3>
-                        <p class="text-3xl font-black text-gray-900 tracking-tighter" id="dailyGanancias">$0.00</p>
+                        <p class="text-3xl font-black text-gray-900 tracking-tighter" id="dailyGanancias">
+                            <span class="animate-pulse bg-gray-200 h-8 w-32 inline-block rounded"></span>
+                        </p>
                     </div>
                 </section>
                 
@@ -60,7 +62,9 @@
                 <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 flex flex-col justify-between">
                     <div>
                         <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Semana Actual</h3>
-                        <p class="text-3xl font-black text-gray-900 tracking-tighter" id="weeklyGanancias">$0.00</p>
+                        <p class="text-3xl font-black text-gray-900 tracking-tighter" id="weeklyGanancias">
+                            <span class="animate-pulse bg-gray-200 h-8 w-32 inline-block rounded"></span>
+                        </p>
                     </div>
                 </section>
 
@@ -68,7 +72,9 @@
                 <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 flex flex-col justify-between">
                     <div>
                         <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Mes Actual</h3>
-                        <p class="text-3xl font-black text-gray-900 tracking-tighter" id="monthlyGanancias">$0.00</p>
+                        <p class="text-3xl font-black text-gray-900 tracking-tighter" id="monthlyGanancias">
+                            <span class="animate-pulse bg-gray-200 h-8 w-32 inline-block rounded"></span>
+                        </p>
                     </div>
                 </section>
 
@@ -76,7 +82,9 @@
                 <section class="bg-gray-900 rounded-2xl shadow border border-gray-900 p-8 flex flex-col justify-between text-white">
                     <div>
                         <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Órdenes Pendientes</h3>
-                        <p class="text-4xl font-black text-yellow-500 tracking-tighter" id="contadorOrdenes">0</p>
+                        <p class="text-4xl font-black text-yellow-500 tracking-tighter" id="contadorOrdenes">
+                            <span class="animate-pulse bg-gray-800 h-10 w-16 inline-block rounded"></span>
+                        </p>
                     </div>
                     <div class="mt-8">
                         <a href="/monitor" target="_blank" class="block text-center bg-yellow-500 text-gray-900 text-sm font-bold py-2 px-4 rounded-xl hover:bg-yellow-400 transition">Ir a Monitor</a>
@@ -103,7 +111,18 @@
                                 </tr>
                             </thead>
                             <tbody id="inventoryList" class="text-sm font-medium divide-y divide-gray-100">
-                                <!-- Datos inyectados via JS desde /api/inventory -->
+                                <tr>
+                                    <td colspan="3" class="py-4 px-4">
+                                        <div class="animate-pulse h-5 bg-gray-200 rounded w-full mb-2"></div>
+                                        <div class="animate-pulse h-5 bg-gray-200 rounded w-5/6"></div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td colspan="3" class="py-4 px-4">
+                                        <div class="animate-pulse h-5 bg-gray-200 rounded w-full mb-2"></div>
+                                        <div class="animate-pulse h-5 bg-gray-200 rounded w-4/6"></div>
+                                    </td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -162,16 +181,29 @@
         });
 
         async function loadInventory() {
+            const tbody = document.getElementById('inventoryList');
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="3" class="py-4 px-4">
+                        <div class="animate-pulse h-5 bg-gray-200 rounded w-full mb-2"></div>
+                        <div class="animate-pulse h-5 bg-gray-200 rounded w-5/6"></div>
+                    </td>
+                </tr>
+            `;
             try {
                 const res = await fetch('/api/inventory');
                 const items = await res.json();
-                const tbody = document.getElementById('inventoryList');
                 if(items && items.length > 0) {
-                    tbody.innerHTML = items.map(item => `
-                        <tr class="hover:bg-gray-50 transition-colors">
-                            <td class="py-4 px-4 font-bold text-gray-800">${item.item}</td>
+                    tbody.innerHTML = items.map(item => {
+                        const lowStock = item.quantity < 10;
+                        const badgeClasses = lowStock 
+                            ? 'bg-red-100 text-red-800 border-red-300' 
+                            : 'bg-green-100 text-green-800 border-green-200';
+                        return `
+                        <tr class="hover:bg-gray-50 transition-colors ${lowStock ? 'bg-red-50' : ''}">
+                            <td class="py-4 px-4 font-bold ${lowStock ? 'text-red-900' : 'text-gray-800'}">${item.item}</td>
                             <td class="py-4 px-4">
-                                <span class="bg-${item.quantity > 5 ? 'green' : 'red'}-100 text-${item.quantity > 5 ? 'green' : 'red'}-800 px-3 py-1 rounded-full text-xs font-black border border-${item.quantity > 5 ? 'green' : 'red'}-200">
+                                <span class="${badgeClasses} px-3 py-1 rounded-full text-xs font-black border">
                                     ${item.quantity} Uds.
                                 </span>
                             </td>
@@ -180,7 +212,7 @@
                                 <button onclick="deleteInventory('${item.item}')" class="text-red-600 hover:text-red-800 text-sm font-bold transition">Eliminar</button>
                             </td>
                         </tr>
-                    `).join('');
+                    `}).join('');
                 } else {
                     tbody.innerHTML = '<tr><td colspan="3" class="py-4 px-4 text-gray-400 italic text-center">No hay inventario registrado.</td></tr>';
                 }
