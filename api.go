@@ -234,7 +234,21 @@ func HandleInventoryAPI(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+var lastGeminiError string
+
+func HandleTestGeminiError(w http.ResponseWriter, r *http.Request) {
+	enableCors(&w)
+	decision, err := CallGemini("test1", "hola")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	json.NewEncoder(w).Encode(decision)
+}
+
 func HandleDashboardAPI(w http.ResponseWriter, r *http.Request) {
+
 	enableCors(&w)
 	if r.Method == "OPTIONS" {
 		w.WriteHeader(http.StatusOK)

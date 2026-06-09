@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 )
 
 func basicAuth(next http.HandlerFunc) http.HandlerFunc {
@@ -15,8 +16,8 @@ func basicAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		user := os.Getenv("ADMIN_USER")
-		pass := os.Getenv("ADMIN_PASS")
+		user := strings.Trim(os.Getenv("ADMIN_USER"), "\"")
+		pass := strings.Trim(os.Getenv("ADMIN_PASS"), "\"")
 		
 		// If credentials are not set in the environment, fallback to a default or block
 		if user == "" || pass == "" {
@@ -35,7 +36,7 @@ func basicAuth(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func main() {
-	databaseURL := os.Getenv("DATABASE_URL")
+	databaseURL := strings.Trim(os.Getenv("DATABASE_URL"), "\"")
 	if databaseURL != "" {
 		InitDB(databaseURL)
 	} else {
@@ -74,6 +75,7 @@ func main() {
 	http.HandleFunc("/admin", basicAuth(HandleAdminInterface))
 
 	// Protected API Routes
+	http.HandleFunc("/api/test_error", HandleTestGeminiError)
 	http.HandleFunc("/api/orders", basicAuth(HandleOrdersAPI))
 	http.HandleFunc("/api/inventory", basicAuth(HandleInventoryAPI))
 	http.HandleFunc("/api/dashboard", basicAuth(HandleDashboardAPI))

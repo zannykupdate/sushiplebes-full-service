@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 )
 
 type GeminiDecision struct {
@@ -98,7 +99,7 @@ ESTRUCTURA STRICTA MULTI-PROPOSITO (SIEMPRE RETORNA JSON en responseMimeType="ap
 var chatMemory = make(map[string]string)
 
 func CallGemini(phone string, userMessage string) (GeminiDecision, error) {
-	apiKey := os.Getenv("GEMINI_API_KEY")
+	apiKey := strings.Trim(os.Getenv("GEMINI_API_KEY"), "\"")
 	if apiKey == "" {
 		return GeminiDecision{}, fmt.Errorf("GEMINI_API_KEY no configurado")
 	}
@@ -153,8 +154,8 @@ func CallGemini(phone string, userMessage string) (GeminiDecision, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("ERROR Gemini Api: %s", string(bodyBytes))
-		return GeminiDecision{}, fmt.Errorf("gemini status code %d", resp.StatusCode)
+		log.Printf("ERROR Gemini Api body: %s", string(bodyBytes))
+	return GeminiDecision{}, fmt.Errorf("gemini status code %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var geminiResp GeminiResponse

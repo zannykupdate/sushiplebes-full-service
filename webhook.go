@@ -9,11 +9,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 )
 
 func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
-		verifyToken := os.Getenv("WHATSAPP_VERIFY_TOKEN")
+		verifyToken := strings.Trim(os.Getenv("WHATSAPP_VERIFY_TOKEN"), "\"")
 		mode := r.URL.Query().Get("hub.mode")
 		token := r.URL.Query().Get("hub.verify_token")
 		challenge := r.URL.Query().Get("hub.challenge")
@@ -35,7 +36,7 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		appSecret := os.Getenv("WHATSAPP_APP_SECRET")
+		appSecret := strings.Trim(os.Getenv("WHATSAPP_APP_SECRET"), "\"")
 		if appSecret != "" {
 			signature := r.Header.Get("X-Hub-Signature-256")
 			if signature == "" || len(signature) <= 7 || signature[:7] != "sha256=" {
