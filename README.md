@@ -58,6 +58,6 @@ go run .
 
 ¡Listo! 
 - Tu bot de WhatsApp ya está escuchando nuevas órdenes.
-- Tu monitor de cocina está listo en: `http://localhost:8080/monitor`
+- Tu monitor de cocina está listo en: `http://localhost:3000/monitor`
 
-*Desarrollado en 2026 para redefinir el estándar de servicio de Los Plebes.*
+*Desarrollado para redefinir el estándar de servicio de Los Plebes.*

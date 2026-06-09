@@ -3,89 +3,88 @@ package main
 import (
 	"context"
 	"log"
-	"os"
+	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func InitDB() {
-	// Obtenemos la conexión de las variables de entorno
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		log.Println("WARNING: DATABASE_URL no configurada. Por favor configura tu string de conexión PostgreSQL.")
-		log.Println("Ejemplo Windows: $env:DATABASE_URL=\"postgres://usuario:password@localhost:5432/sushipos\"")
+var DB *pgxpool.Pool
+
+func InitDB(databaseURL string) {
+	poolConfig, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		log.Printf("ERROR: Error parsing DATABASE_URL: %v", err)
 		return
 	}
 
-	poolConfig, err := pgxpool.ParseConfig(dsn)
-	if err != nil {
-		log.Fatalf("ERROR: No se pudo parsear el string de conexión de la base de datos: %v", err)
+	var pool *pgxpool.Pool
+	maxRetries := 5
+	for i := 1; i <= maxRetries; i++ {
+		pool, err = pgxpool.NewWithConfig(context.Background(), poolConfig)
+		if err == nil {
+			err = pool.Ping(context.Background())
+		}
+		
+		if err == nil {
+			DB = pool
+			log.Println("SUCCESS: Conexión a PostgreSQL (pgxpool) establecida exitosamente.")
+			crearTablasAutomaticas()
+			return
+		}
+		
+		log.Printf("WARNING: Intento %d/%d fallido al conectar a PostgreSQL: %v", i, maxRetries, err)
+		if pool != nil {
+			pool.Close()
+		}
+		time.Sleep(2 * time.Second)
 	}
 
-	// Iniciamos el pool de conexiones
-	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
-	if err != nil {
-		log.Printf("ERROR: No se pudo conectar a PostgreSQL: %v", err)
-	} else {
-		// Asignamos a la variable global DB (usada en webhook.go, bot.go y monitor.go)
-		DB = pool
-		log.Println("SUCCESS: Conexión a PostgreSQL (pgxpool) establecida exitosamente.")
-
-		// Validar e inicializar la base de datos del MVP
-		crearTablasAutomaticas()
-	}
+	log.Printf("ERROR: No se pudo conectar a PostgreSQL tras %d intentos.", maxRetries)
 }
 
 func crearTablasAutomaticas() {
-	if DB == nil {
-		return
-	}
-	ctx := context.Background()
 	query := `
-	CREATE TABLE IF NOT EXISTS mensajes_raw (
+	CREATE TABLE IF NOT EXISTS inventory (
 		id SERIAL PRIMARY KEY,
-		telefono VARCHAR(20),
-		payload JSONB,
-		creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		item VARCHAR(100) NOT NULL,
+		quantity INT NOT NULL
 	);
-
-	CREATE TABLE IF NOT EXISTS pedidos (
+	CREATE TABLE IF NOT EXISTS orders (
 		id SERIAL PRIMARY KEY,
-		telefono VARCHAR(20),
 		nombre VARCHAR(100),
+		telefono VARCHAR(50),
 		detalles_orden TEXT,
 		direccion_entrega TEXT,
 		metodo_pago VARCHAR(50),
-		total DECIMAL(10, 2),
-		estado INT DEFAULT 0,
-		creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		total NUMERIC,
+		status VARCHAR(50) DEFAULT 'PENDING'
 	);
-
-	CREATE TABLE IF NOT EXISTS ganancias (
+	CREATE TABLE IF NOT EXISTS earnings (
 		id SERIAL PRIMARY KEY,
-		pedido_id INT,
-		monto DECIMAL(10, 2),
-		creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		amount NUMERIC NOT NULL,
+		order_id INT
 	);
-
-	CREATE TABLE IF NOT EXISTS inventario (
-		id SERIAL PRIMARY KEY,
-		insumo VARCHAR(100),
-		cantidad INT DEFAULT 100
-	);
-
-	-- Inserción de inventario base para el MVP si las tablas están vacías
-	INSERT INTO inventario (insumo, cantidad) 
-	SELECT 'Arroz', 100 WHERE NOT EXISTS (SELECT 1 FROM inventario WHERE insumo = 'Arroz');
-	
-	INSERT INTO inventario (insumo, cantidad) 
-	SELECT 'Salmón', 100 WHERE NOT EXISTS (SELECT 1 FROM inventario WHERE insumo = 'Salmón');
 	`
-
-	_, err := DB.Exec(ctx, query)
+	_, err := DB.Exec(context.Background(), query)
 	if err != nil {
-		log.Fatalf("ERROR: Fallo inicializando tablas del MVP: %v", err)
+		log.Printf("ERROR: Fallo inicializando tablas del MVP: %v", err)
 	} else {
-		log.Println("SUCCESS: Architectura de motor PostgreSQL y esquemas DDL (pedidos, raw, ganancias, inventario) en línea.")
+		log.Println("SUCCESS: Architectura de motor PostgreSQL y esquemas DDL en línea.")
 	}
+}
+
+func InsertOrder(ctx context.Context, nombre, telefono, detalles, direccion, pago string, total float64) (int, error) {
+	var id int
+	err := DB.QueryRow(ctx, "INSERT INTO orders (nombre, telefono, detalles_orden, direccion_entrega, metodo_pago, total) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+		nombre, telefono, detalles, direccion, pago, total).Scan(&id)
+	
+	if err == nil {
+		// impactar ganancias e inventario de manera super simple
+		DB.Exec(ctx, "INSERT INTO earnings (amount, order_id) VALUES ($1, $2)", total, id)
+		if strings.Contains(strings.ToLower(detalles), "arroz") {
+			DB.Exec(ctx, "UPDATE inventory SET quantity = quantity - 1 WHERE item = 'arroz'")
+		}
+	}
+	return id, err
 }
