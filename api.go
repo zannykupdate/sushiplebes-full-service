@@ -73,7 +73,7 @@ func HandleOrdersAPI(w http.ResponseWriter, r *http.Request) {
 		pago, _ := req["metodo_pago"].(string)
 		total, _ := req["total"].(float64)
 
-		id, err := InsertOrder(context.Background(), nombre, telefono, detalles, direccion, pago, total)
+		id, err := InsertOrder(context.Background(), telefono, detalles, direccion, pago, total, []string{})
 		if err != nil {
 			http.Error(w, `{"error": "Failed to insert order"}`, http.StatusInternalServerError)
 			return
@@ -152,11 +152,17 @@ func HandleInventoryAPI(w http.ResponseWriter, r *http.Request) {
 
 		var items []map[string]interface{}
 		for rows.Next() {
-			var id, quantity int
+			var id int
+			var quantity int64
 			var item string
 			if err := rows.Scan(&id, &item, &quantity); err == nil {
 				items = append(items, map[string]interface{}{"id": id, "item": item, "quantity": quantity})
+			} else {
+				log.Printf("Scan error: %v", err)
 			}
+		}
+		if items == nil {
+			items = make([]map[string]interface{}, 0)
 		}
 		json.NewEncoder(w).Encode(items)
 
