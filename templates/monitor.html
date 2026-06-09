@@ -135,85 +135,213 @@
         #printFrame {
             display: none;
         }
+
+        .btn-connect {
+            background-color: #ffd700;
+            border: 3px solid var(--border-color);
+            color: var(--text-color);
+            padding: 0.5rem 1rem;
+            font-weight: 800;
+            font-size: 0.9rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            box-shadow: 4px 4px 0px var(--border-color);
+            transition: all 0.1s ease;
+        }
+
+        .btn-connect:active {
+            box-shadow: 0px 0px 0px var(--border-color);
+            transform: translate(4px, 4px);
+        }
     </style>
 </head>
 <body>
 
     <div class="header-bar">
         <h1>Monitor Cocina | Comandas</h1>
-        <div class="status-badge" id="statusIndicator">🟢 EN LÍNEA (SSE)</div>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+            <button class="btn-connect" id="btnConnect" onclick="connectSerialPrinter()">🔌 Conectar Ticketera (Web Serial)</button>
+            <div class="status-badge" id="statusIndicator">🟢 EN LÍNEA (SSE)</div>
+        </div>
     </div>
 
     <div class="grid" id="pedidosContainer">
         <!-- Las tarjetas se inyectarán aquí dinámicamente -->
     </div>
 
-    <!-- Módulo de Automatización de Tícket Térmico -->
+    <!-- Módulo de Automatización de Tícket Térmico (Fallback) -->
     <iframe id="printFrame"></iframe>
 
     <script>
         // ==========================================
-        // 1. LÓGICA DE FORMATO DE TICKET (32 CARACTERES ESC/POS)
+        // 0. CONEXIÓN WEB SERIAL ESC/POS
         // ==========================================
-        const formatTicket = (pedido) => {
-            const padRight = (str, len) => str.length >= len ? str.substring(0,len) : str + ' '.repeat(len - str.length);
-            const padLeft = (str, len) => str.length >= len ? str.substring(0,len) : ' '.repeat(len - str.length) + str;
-            const center = (str, len) => {
-                if (str.length >= len) return str.substring(0, len);
-                const left = Math.floor((len - str.length) / 2);
-                const right = len - str.length - left;
-                return ' '.repeat(left) + str + ' '.repeat(right);
-            };
+        let printerWriter = null;
 
-            let ticket = "\n";
-            ticket += center("SUSHI LOSPLEBES", 32) + "\n";
-            ticket += center("RFC: SPL190101XYZ", 32) + "\n";
-            ticket += center("Ticket de Comanda/Venta", 32) + "\n";
-            ticket += "-".repeat(32) + "\n";
-            ticket += padRight("Orden ID: " + pedido.id, 32) + "\n";
-            ticket += padRight("Cliente: " + pedido.nombre, 32) + "\n";
-            ticket += padRight("Tel: " + pedido.telefono, 32) + "\n";
-            
-            const isPickup = typeof pedido.direccion_entrega === "string" && pedido.direccion_entrega.toUpperCase().includes("PICKUP");
-            ticket += "-".repeat(32) + "\n";
-            ticket += center(isPickup ? "** PICKUP **" : "** DELIVERY **", 32) + "\n";
-            ticket += "-".repeat(32) + "\n";
-            
-            ticket += padRight("Detalles del pedido:", 32) + "\n";
-            
-            let detalles = pedido.detalles_orden || "";
-            // Separar en líneas de max 32 chars sin cortar palabras bruscamente si es posible
-            for(let i=0; i<detalles.length; i+=32) {
-                ticket += padRight(detalles.substring(i, i+32), 32) + "\n";
-            }
-
-            ticket += "-".repeat(32) + "\n";
-            ticket += padRight("Total:", 15) + padLeft("$" + parseFloat(pedido.total || 0).toFixed(2), 17) + "\n";
-            ticket += padRight("Pago Ref:", 15) + padLeft(pedido.metodo_pago || "Efectivo", 17) + "\n";
-            
-            if (!isPickup) {
-                ticket += "-".repeat(32) + "\n";
-                ticket += center("DIRECCION DE ENTREGA", 32) + "\n";
-                let dir = pedido.direccion_entrega || "";
-                for(let i=0; i<dir.length; i+=32) {
-                    ticket += padRight(dir.substring(i, i+32), 32) + "\n";
+        async function connectSerialPrinter() {
+            try {
+                if (!navigator.serial) {
+                    alert("Tu navegador no soporta Web Serial API. Usa Google Chrome o Edge.");
+                    return;
                 }
+                const port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 9600 });
+                printerWriter = port.writable.getWriter();
+                
+                const btn = document.getElementById('btnConnect');
+                btn.innerText = "🖨️ TÍCKETERA CONECTADA";
+                btn.style.backgroundColor = "#2e7d32";
+                btn.style.color = "white";
+            } catch (err) {
+                console.error("Error conectando a la impresora serie:", err);
             }
+        }
 
-            ticket += "=".repeat(32) + "\n";
-            ticket += center("IVA INCLUIDO", 32) + "\n";
-            ticket += center("QUEJAS PROFECO: 800 468 8722", 32) + "\n";
-            ticket += center("¡GRACIAS POR TU COMPRA!", 32) + "\n";
-            ticket += "\n\n\n\n";
-
-            return ticket;
+        const normalizeText = (text) => {
+            if (!text) return "";
+            return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
         };
 
         // ==========================================
-        // 2. DISPARADOR SILENCIOSO DE IMPRESIÓN 
+        // 1. RAW ESC/POS BYTES (32 CARACTERES - 58MM)
         // ==========================================
-        const printTicket = (pedido) => {
-            const ticketText = formatTicket(pedido);
+        const generateEscPosData = (pedido) => {
+            const encoder = new TextEncoder();
+            const buffers = [];
+
+            const writeCmd = (cmdArray) => buffers.push(new Uint8Array(cmdArray));
+            const writeText = (text) => buffers.push(encoder.encode(normalizeText(text)));
+
+            const INIT = [0x1b, 0x40];
+            const ALIGN_CENTER = [0x1b, 0x61, 0x01];
+            const ALIGN_LEFT = [0x1b, 0x61, 0x00];
+            const BOLD_ON = [0x1b, 0x45, 0x01];
+            const BOLD_OFF = [0x1b, 0x45, 0x00];
+            const CUT = [0x1d, 0x56, 0x41, 0x03];
+
+            const isPickup = typeof pedido.direccion_entrega === "string" && pedido.direccion_entrega.toUpperCase().includes("PICKUP");
+
+            const padRight = (str, len) => str.length >= len ? str.substring(0,len) : str + ' '.repeat(len - str.length);
+            const padLeft = (str, len) => str.length >= len ? str.substring(0,len) : ' '.repeat(len - str.length) + str;
+
+            writeCmd(INIT);
+            writeCmd(ALIGN_CENTER);
+            writeCmd(BOLD_ON);
+            writeText("SUSHI LOSPLEBES\n");
+            writeCmd(BOLD_OFF);
+            writeText("RFC: SPL190101XYZ\nTicket de Comanda\n");
+            writeText("-".repeat(32) + "\n");
+            
+            writeCmd(ALIGN_LEFT);
+            writeText(padRight("Orden ID: " + pedido.id, 32) + "\n");
+            writeText(padRight("Cliente: " + pedido.nombre, 32) + "\n");
+            writeText(padRight("Tel: " + pedido.telefono, 32) + "\n");
+            
+            writeCmd(ALIGN_CENTER);
+            writeCmd(BOLD_ON);
+            writeText("-".repeat(32) + "\n");
+            writeText(isPickup ? "** PICKUP **\n" : "** DELIVERY **\n");
+            writeText("-".repeat(32) + "\n");
+            writeCmd(BOLD_OFF);
+
+            writeCmd(ALIGN_LEFT);
+            writeText("Detalles del pedido:\n");
+            let detalles = normalizeText(pedido.detalles_orden || "");
+            for(let i=0; i<detalles.length; i+=32) {
+                writeText(padRight(detalles.substring(i, i+32), 32) + "\n");
+            }
+
+            writeText("-".repeat(32) + "\n");
+            writeCmd(BOLD_ON);
+            writeText(padRight("Total:", 15) + padLeft("$" + parseFloat(pedido.total || 0).toFixed(2), 17) + "\n");
+            writeCmd(BOLD_OFF);
+            writeText(padRight("Pago Ref:", 15) + padLeft(pedido.metodo_pago || "Efectivo", 17) + "\n");
+
+            if (!isPickup) {
+                writeText("-".repeat(32) + "\n");
+                writeCmd(ALIGN_CENTER);
+                writeCmd(BOLD_ON);
+                writeText("DIRECCION DE ENTREGA\n");
+                writeCmd(BOLD_OFF);
+                
+                let dir = normalizeText(pedido.direccion_entrega || "");
+                for(let i=0; i<dir.length; i+=32) {
+                    writeText(padRight(dir.substring(i, i+32), 32) + "\n");
+                }
+            }
+
+            writeText("=".repeat(32) + "\n");
+            writeCmd(ALIGN_CENTER);
+            writeText("IVA INCLUIDO\nQUEJAS PROFECO: 800 468 8722\nGRACIAS POR TU COMPRA\n\n\n\n\n");
+            writeCmd(CUT);
+
+            return buffers;
+        };
+
+        // ==========================================
+        // 2. DISPARADOR DE IMPRESIÓN (RAW o FALLBACK IFRAME)
+        // ==========================================
+        const printTicket = async (pedido) => {
+            if (printerWriter) {
+                try {
+                    const buffers = generateEscPosData(pedido);
+                    for (const buffer of buffers) {
+                        await printerWriter.write(buffer);
+                    }
+                    console.log("Impreso via RAW ESC/POS USB/Serial.");
+                    return;
+                } catch (err) {
+                    console.error("Error enviando RAW ESC/POS:", err);
+                }
+            }
+            
+            // IFRAME FALLBACK
+            const formatTicketIframe = (ped) => {
+                const padR = (str, len) => str.length >= len ? str.substring(0,len) : str + ' '.repeat(len - str.length);
+                const padL = (str, len) => str.length >= len ? str.substring(0,len) : ' '.repeat(len - str.length) + str;
+                const center = (str, len) => {
+                    if (str.length >= len) return str.substring(0, len);
+                    const left = Math.floor((len - str.length) / 2);
+                    return ' '.repeat(left) + str + ' '.repeat(len - str.length - left);
+                };
+
+                let ticket = "\n";
+                ticket += center("SUSHI LOSPLEBES", 32) + "\n";
+                ticket += center("RFC: SPL190101XYZ", 32) + "\n";
+                ticket += center("Ticket de Comanda/Venta", 32) + "\n";
+                ticket += "-".repeat(32) + "\n";
+                ticket += padR("Orden ID: " + ped.id, 32) + "\n";
+                ticket += padR("Cliente: " + ped.nombre, 32) + "\n";
+                ticket += padR("Tel: " + ped.telefono, 32) + "\n";
+                
+                const pick = typeof ped.direccion_entrega === "string" && ped.direccion_entrega.toUpperCase().includes("PICKUP");
+                ticket += "-".repeat(32) + "\n";
+                ticket += center(pick ? "** PICKUP **" : "** DELIVERY **", 32) + "\n";
+                ticket += "-".repeat(32) + "\n";
+                
+                ticket += padR("Detalles del pedido:", 32) + "\n";
+                let dtls = normalizeText(ped.detalles_orden || "");
+                for(let i=0; i<dtls.length; i+=32) { ticket += padR(dtls.substring(i, i+32), 32) + "\n"; }
+
+                ticket += "-".repeat(32) + "\n";
+                ticket += padR("Total:", 15) + padL("$" + parseFloat(ped.total || 0).toFixed(2), 17) + "\n";
+                ticket += padR("Pago Ref:", 15) + padL(ped.metodo_pago || "Efectivo", 17) + "\n";
+                
+                if (!pick) {
+                    ticket += "-".repeat(32) + "\n";
+                    ticket += center("DIRECCION DE ENTREGA", 32) + "\n";
+                    let dir = normalizeText(ped.direccion_entrega || "");
+                    for(let i=0; i<dir.length; i+=32) { ticket += padR(dir.substring(i, i+32), 32) + "\n"; }
+                }
+
+                ticket += "=".repeat(32) + "\n";
+                ticket += center("IVA INCLUIDO", 32) + "\n";
+                ticket += center("QUEJAS PROFECO: 800 468 8722", 32) + "\n";
+                ticket += center("¡GRACIAS POR TU COMPRA!", 32) + "\n\n\n\n";
+                return ticket;
+            };
+
+            const ticketText = formatTicketIframe(pedido);
             const iframe = document.getElementById('printFrame');
             const doc = iframe.contentWindow.document;
             
