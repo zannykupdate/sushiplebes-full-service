@@ -177,6 +177,7 @@ func CallGemini(phone string, userMessage string) (GeminiDecision, error) {
 	}
 
 	if statusCode != http.StatusOK {
+		LogSystemError("GEMINI_API", "Error completando petición a Gemini", string(bodyBytes), statusCode)
 		return GeminiDecision{}, fmt.Errorf("todos los intentos a gemini fallaron. ultimo status code %d: %s", statusCode, string(bodyBytes))
 	}
 

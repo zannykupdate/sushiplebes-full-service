@@ -37,12 +37,23 @@
                     <h1 class="text-3xl font-black text-gray-900 uppercase tracking-tight">Panel de Control</h1>
                     <p class="text-gray-500 font-medium mt-1">Métricas en tiempo real e inventario</p>
                 </div>
-                <div class="flex items-center gap-2">
-                    <span class="relative flex h-3 w-3">
-                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-                    </span>
-                    <span class="text-sm font-bold text-gray-600 tracking-wide uppercase">Sistema Activo</span>
+                <div class="flex items-center gap-4">
+                    <!-- Monitor de estado de WhatsApp -->
+                    <div id="whatsappStatusBadge" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 border border-gray-200 transition-colors">
+                        <span class="relative flex h-3 w-3">
+                            <span id="waPing" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-400 opacity-75"></span>
+                            <span id="waDot" class="relative inline-flex rounded-full h-3 w-3 bg-gray-500"></span>
+                        </span>
+                        <span id="waText" class="text-xs font-bold text-gray-600 tracking-wide uppercase">Cargando WS...</span>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <span class="relative flex h-3 w-3">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                        </span>
+                        <span class="text-sm font-bold text-gray-600 tracking-wide uppercase">Sistema Activo</span>
+                    </div>
                 </div>
             </header>
 
@@ -93,8 +104,8 @@
             </div>
 
             <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 flex-1">
-                <!-- Tabla de datos (Ocupa espacio completo debajo) -->
-                <section class="xl:col-span-3 bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+                <!-- Tabla de datos (Ocupa 2 columnas debajo) -->
+                <section class="xl:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
                     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
                         <h3 class="text-sm font-bold text-gray-800 uppercase tracking-wider">Stock de Inventario (Básico)</h3>
                         <button onclick="openInventoryModal()" class="mt-4 sm:mt-0 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-4 rounded-xl transition">
@@ -112,19 +123,24 @@
                             </thead>
                             <tbody id="inventoryList" class="text-sm font-medium divide-y divide-gray-100">
                                 <tr>
-                                    <td colspan="3" class="py-4 px-4">
-                                        <div class="animate-pulse h-5 bg-gray-200 rounded w-full mb-2"></div>
-                                        <div class="animate-pulse h-5 bg-gray-200 rounded w-5/6"></div>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td colspan="3" class="py-4 px-4">
-                                        <div class="animate-pulse h-5 bg-gray-200 rounded w-full mb-2"></div>
-                                        <div class="animate-pulse h-5 bg-gray-200 rounded w-4/6"></div>
-                                    </td>
+                                    <td colspan="3" class="py-4 px-4 text-center text-gray-400 italic font-medium">Cargando inventario...</td>
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+                </section>
+
+                <!-- Panel de Errores -->
+                <section class="xl:col-span-1 bg-white rounded-2xl shadow-sm border border-gray-200 p-8 flex flex-col h-full max-h-[600px]">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-sm font-bold text-gray-800 uppercase tracking-wider flex items-center gap-2">
+                            <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                            Errores del Sistema
+                        </h3>
+                        <span id="errorsCountBadge" class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-black">0</span>
+                    </div>
+                    <div class="overflow-y-auto flex-1 pr-2 space-y-3" id="systemErrorsList">
+                        <div class="text-center text-gray-400 italic text-sm py-4">Cargando errores...</div>
                     </div>
                 </section>
             </div>
@@ -178,7 +194,62 @@
 
             // Inventory Data
             await loadInventory();
+
+            // Status poll
+            pollSystemStatus();
+            setInterval(pollSystemStatus, 3000);
         });
+
+        async function pollSystemStatus() {
+            try {
+                const res = await fetch('/api/system_status');
+                const data = await res.json();
+                
+                // Update WhatsApp Badge
+                const waBadge = document.getElementById('whatsappStatusBadge');
+                const waPing = document.getElementById('waPing');
+                const waDot = document.getElementById('waDot');
+                const waText = document.getElementById('waText');
+                
+                if (data.whatsapp_status === 200) {
+                    waBadge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-50 border border-green-200 transition-colors';
+                    waPing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75';
+                    waDot.className = 'relative inline-flex rounded-full h-3 w-3 bg-green-500';
+                    waText.className = 'text-xs font-bold text-green-700 tracking-wide uppercase';
+                    waText.innerText = 'WA API: NORMAL';
+                } else {
+                    waBadge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-50 border border-red-200 transition-colors animate-pulse';
+                    waPing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75';
+                    waDot.className = 'relative inline-flex rounded-full h-3 w-3 bg-red-500';
+                    waText.className = 'text-xs font-bold text-red-700 tracking-wide uppercase';
+                    waText.innerText = `WA API: ERROR ${data.whatsapp_status}`;
+                }
+
+                // Update Errors
+                const errorsCountBadge = document.getElementById('errorsCountBadge');
+                const errorsList = document.getElementById('systemErrorsList');
+                
+                errorsCountBadge.innerText = data.errors_count;
+                if (data.errors_count === 0) {
+                    errorsList.innerHTML = '<div class="text-center text-gray-400 italic text-sm py-4">Sistema estable. Sin errores recientes.</div>';
+                } else {
+                    errorsList.innerHTML = data.errors.map(err => {
+                        const date = new Date(err.timestamp).toLocaleTimeString();
+                        return `
+                        <div class="p-3 bg-red-50 border border-red-100 rounded-lg">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-xs font-bold text-red-800 uppercase tracking-wider">${err.type} [${err.status_code}]</span>
+                                <span class="text-xs text-red-500 font-medium">${date}</span>
+                            </div>
+                            <p class="text-sm font-bold text-gray-800 mb-1">${err.message}</p>
+                            <p class="text-xs text-gray-600 truncate" title="${err.details}">${err.details}</p>
+                        </div>`;
+                    }).join('');
+                }
+            } catch (err) {
+                console.error("Error fetching system status:", err);
+            }
+        }
 
         async function loadInventory() {
             const tbody = document.getElementById('inventoryList');

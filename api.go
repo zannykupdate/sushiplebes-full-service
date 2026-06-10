@@ -247,6 +247,28 @@ func HandleTestGeminiError(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(decision)
 }
 
+func HandleSystemStatusAPI(w http.ResponseWriter, r *http.Request) {
+	enableCors(&w)
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == "GET" {
+		whatsappStatus := GetWhatsAppStatus()
+		errorsCount := len(GetSystemErrors())
+		
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"whatsapp_status": whatsappStatus,
+			"errors": GetSystemErrors(),
+			"errors_count": errorsCount,
+		})
+	} else {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
 func HandleDashboardAPI(w http.ResponseWriter, r *http.Request) {
 
 	enableCors(&w)

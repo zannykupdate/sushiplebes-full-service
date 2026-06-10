@@ -53,9 +53,11 @@ func SendWhatsAppMessage(phone string, message string) error {
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		log.Printf("ERROR sending WhatsApp msg, status: %d, body: %s", resp.StatusCode, string(bodyBytes))
+		LogSystemError("WHATSAPP_API", "Error enviando mensaje", string(bodyBytes), resp.StatusCode)
+		SetWhatsAppStatus(resp.StatusCode)
 		return fmt.Errorf("error enviando mensaje whatsapp")
 	}
+	SetWhatsAppStatus(200)
 	
 	log.Printf("SUCCESS: WhatsApp message sent to %s", phone)
 	return nil
@@ -101,9 +103,11 @@ func SendWhatsAppImage(phone string, imageUrl string) error {
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		log.Printf("ERROR sending WhatsApp image, status: %d, body: %s", resp.StatusCode, string(bodyBytes))
+		LogSystemError("WHATSAPP_API", "Error enviando imagen", string(bodyBytes), resp.StatusCode)
+		SetWhatsAppStatus(resp.StatusCode)
 		return fmt.Errorf("error enviando imagen whatsapp")
 	}
+	SetWhatsAppStatus(200)
 	return nil
 }
 
