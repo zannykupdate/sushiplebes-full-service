@@ -292,17 +292,32 @@ func HandleDashboardAPI(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == "GET" {
 		var dailyGanancias, weeklyGanancias, monthlyGanancias, totalGanancias float64
-		DB.QueryRow(context.Background(), "SELECT COALESCE(SUM(amount), 0) FROM earnings").Scan(&totalGanancias)
-		
-		// Assuming reasonable local timezone approximation or using UTC standard DATE
-		DB.QueryRow(context.Background(), "SELECT COALESCE(SUM(amount), 0) FROM earnings WHERE created_at >= CURRENT_DATE").Scan(&dailyGanancias)
-		DB.QueryRow(context.Background(), "SELECT COALESCE(SUM(amount), 0) FROM earnings WHERE created_at >= date_trunc('week', CURRENT_DATE)").Scan(&weeklyGanancias)
-		DB.QueryRow(context.Background(), "SELECT COALESCE(SUM(amount), 0) FROM earnings WHERE created_at >= date_trunc('month', CURRENT_DATE)").Scan(&monthlyGanancias)
+		DB.QueryRow(context.Background(), `
+			SELECT 
+				COALESCE(SUM(amount), 0),
+				COALESCE(SUM(amount) FILTER (WHERE created_at >= CURRENT_DATE), 0),
+				COALESCE(SUM(amount) FILTER (WHERE created_at >= date_trunc('week', CURRENT_DATE)), 0),
+				COALESCE(SUM(amount) FILTER (WHERE created_at >= date_trunc('month', CURRENT_DATE)), 0)
+			FROM earnings
+		`).Scan(&totalGanancias, &dailyGanancias, &weeklyGanancias, &monthlyGanancias)
 
 		var pendingOrders int
 		err := DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM orders WHERE status = 'PENDING'").Scan(&pendingOrders)
 		if err != nil {
 			log.Printf("ERROR: GET /api/dashboard failed to count orders: %v", err)
+		}
+
+		// Sales by payment method
+		rows, err := DB.Query(context.Background(), "SELECT metodo_pago, SUM(total) FROM orders GROUP BY metodo_pago")
+		var salesByPayment []map[string]interface{}
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var mp string
+				var am float64
+				rows.Scan(&mp, &am)
+				salesByPayment = append(salesByPayment, map[string]interface{}{"metodo_pago": mp, "amount": am})
+			}
 		}
 
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -311,6 +326,7 @@ func HandleDashboardAPI(w http.ResponseWriter, r *http.Request) {
 			"weekly_ganancias": weeklyGanancias,
 			"monthly_ganancias": monthlyGanancias,
 			"pending_orders":  pendingOrders,
+			"sales_by_payment": salesByPayment,
 		})
 	} else {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -381,6 +397,189 @@ func HandleTicketsAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"success": true}`))
+		return
+	}
+
+	http.Error(w, `{"error": "Method not allowed"}`, http.StatusMethodNotAllowed)
+}
+
+func HandleAccountingAPI(w http.ResponseWriter, r *http.Request) {
+	enableCors(&w)
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	if DB == nil {
+		http.Error(w, `{"error": "Database not connected"}`, http.StatusInternalServerError)
+		return
+	}
+
+	if r.Method == "GET" {
+		rows, err := DB.Query(context.Background(), "SELECT id, description, amount, category, created_at FROM expenses ORDER BY id DESC")
+		if err != nil {
+			log.Printf("ERROR: GET /api/accounting expenses: %v", err)
+			http.Error(w, `{"error": "Failed to fetch expenses"}`, http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var expenses []map[string]interface{}
+		for rows.Next() {
+			var id int
+			var description, category string
+			var amount float64
+			var created time.Time
+			rows.Scan(&id, &description, &amount, &category, &created)
+			expenses = append(expenses, map[string]interface{}{
+				"id": id,
+				"description": description,
+				"amount": amount,
+				"category": category,
+				"created_at": created.Format(time.RFC3339),
+			})
+		}
+		if expenses == nil {
+			expenses = make([]map[string]interface{}, 0)
+		}
+		
+		var totalExpenses float64
+		DB.QueryRow(context.Background(), "SELECT COALESCE(SUM(amount), 0) FROM expenses").Scan(&totalExpenses)
+		
+		var totalEarnings float64
+		DB.QueryRow(context.Background(), "SELECT COALESCE(SUM(amount), 0) FROM earnings").Scan(&totalEarnings)
+		
+		rowsCat, _ := DB.Query(context.Background(), "SELECT category, SUM(amount) FROM expenses GROUP BY category")
+		var expensesByCategory []map[string]interface{}
+		if rowsCat != nil {
+			defer rowsCat.Close()
+			for rowsCat.Next() {
+				var cat string
+				var am float64
+				rowsCat.Scan(&cat, &am)
+				expensesByCategory = append(expensesByCategory, map[string]interface{}{"category": cat, "amount": am})
+			}
+		}
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"expenses": expenses,
+			"total_expenses": totalExpenses,
+			"total_earnings": totalEarnings,
+			"net_profit": totalEarnings - totalExpenses,
+			"expenses_by_category": expensesByCategory,
+		})
+		return
+	} else if r.Method == "POST" {
+		var req map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error": "Invalid body"}`, http.StatusBadRequest)
+			return
+		}
+		desc, _ := req["description"].(string)
+		amount, _ := req["amount"].(float64)
+		cat, _ := req["category"].(string)
+		
+		_, err := DB.Exec(context.Background(), "INSERT INTO expenses (description, amount, category) VALUES ($1, $2, $3)", desc, amount, cat)
+		if err != nil {
+			http.Error(w, `{"error": "Insert failed"}`, http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]bool{"success": true})
+		return
+	}
+	http.Error(w, `{"error": "Method not allowed"}`, http.StatusMethodNotAllowed)
+}
+
+func HandleMenuAPI(w http.ResponseWriter, r *http.Request) {
+	enableCors(&w)
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	if DB == nil {
+		http.Error(w, `{"error": "Database not connected"}`, http.StatusInternalServerError)
+		return
+	}
+
+	if r.Method == "GET" {
+		rows, err := DB.Query(context.Background(), "SELECT id, name, description, price, category, is_active FROM menu_items ORDER BY id ASC")
+		if err != nil {
+			http.Error(w, `{"error": "Failed to fetch menu items"}`, http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var items []map[string]interface{}
+		for rows.Next() {
+			var id int
+			var name, description, category string
+			var price float64
+			var isActive bool
+			if err := rows.Scan(&id, &name, &description, &price, &category, &isActive); err == nil {
+				items = append(items, map[string]interface{}{
+					"id": id,
+					"name": name,
+					"description": description,
+					"price": price,
+					"category": category,
+					"is_active": isActive,
+				})
+			}
+		}
+		if items == nil {
+			items = make([]map[string]interface{}, 0)
+		}
+		json.NewEncoder(w).Encode(items)
+		return
+	} else if r.Method == "POST" {
+		var req map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error": "Invalid body"}`, http.StatusBadRequest)
+			return
+		}
+		name, _ := req["name"].(string)
+		desc, _ := req["description"].(string)
+		price, _ := req["price"].(float64)
+		cat, _ := req["category"].(string)
+		
+		_, err := DB.Exec(context.Background(), "INSERT INTO menu_items (name, description, price, category) VALUES ($1, $2, $3, $4)", name, desc, price, cat)
+		if err != nil {
+			http.Error(w, `{"error": "Insert failed"}`, http.StatusInternalServerError)
+			return
+		}
+		UpdateGeminiPrompt() // Actualizar el prompt en memoria
+		json.NewEncoder(w).Encode(map[string]bool{"success": true})
+		return
+	} else if r.Method == "PUT" {
+		var req map[string]interface{}
+		json.NewDecoder(r.Body).Decode(&req)
+		idFloat, _ := req["id"].(float64)
+		id := int(idFloat)
+
+		if action, ok := req["action"].(string); ok && action == "toggle" {
+			isActive, _ := req["is_active"].(bool)
+			DB.Exec(context.Background(), "UPDATE menu_items SET is_active=$1 WHERE id=$2", isActive, id)
+		} else {
+		    name, _ := req["name"].(string)
+		    desc, _ := req["description"].(string)
+		    price, _ := req["price"].(float64)
+		    cat, _ := req["category"].(string)
+		    DB.Exec(context.Background(), "UPDATE menu_items SET name=$1, description=$2, price=$3, category=$4 WHERE id=$5", name, desc, price, cat, id)
+		}
+		UpdateGeminiPrompt()
+		json.NewEncoder(w).Encode(map[string]bool{"success": true})
+		return
+	} else if r.Method == "DELETE" {
+		var req map[string]interface{}
+		json.NewDecoder(r.Body).Decode(&req)
+		idFloat, _ := req["id"].(float64)
+		
+		DB.Exec(context.Background(), "DELETE FROM menu_items WHERE id=$1", int(idFloat))
+		UpdateGeminiPrompt()
+		json.NewEncoder(w).Encode(map[string]bool{"success": true})
 		return
 	}
 

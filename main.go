@@ -81,6 +81,8 @@ func main() {
 	http.HandleFunc("/api/dashboard", basicAuth(HandleDashboardAPI))
 	http.HandleFunc("/api/system_status", basicAuth(HandleSystemStatusAPI))
 	http.HandleFunc("/api/tickets", basicAuth(HandleTicketsAPI))
+	http.HandleFunc("/api/accounting", basicAuth(HandleAccountingAPI))
+	http.HandleFunc("/api/menu", basicAuth(HandleMenuAPI))
 
 	log.Println("⚡ Webhook escuchando en: http://localhost:" + port + "/webhook")
 	log.Println("🖥️ Monitor disponible en: http://localhost:" + port + "/monitor")

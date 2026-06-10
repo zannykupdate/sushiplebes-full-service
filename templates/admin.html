@@ -6,6 +6,7 @@
     <title>SUSHI LOSPLEBES | Panel Administrativo</title>
     <!-- Proveído bajo la regla estricta de no usar React/Webpack -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-gray-50 text-gray-900 font-sans antialiased min-h-screen">
     <!-- Contenedor Maestro Responsivo (Mobile-First / Desktop Sidebar) -->
@@ -33,6 +34,14 @@
                 <a href="#" onclick="switchTab('soporte', this)" class="nav-item flex items-center gap-3 px-4 py-3 text-gray-300 rounded-lg font-semibold hover:bg-gray-800 hover:text-white transition-colors">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
                     Atención al Cliente
+                </a>
+                 <a href="#" onclick="switchTab('contabilidad', this)" class="nav-item flex items-center gap-3 px-4 py-3 text-gray-300 rounded-lg font-semibold hover:bg-gray-800 hover:text-white transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Contabilidad
+                </a>
+                <a href="#" onclick="switchTab('menu', this)" class="nav-item flex items-center gap-3 px-4 py-3 text-gray-300 rounded-lg font-semibold hover:bg-gray-800 hover:text-white transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>
+                    Menú
                 </a>
                 <a href="/monitor" target="_blank" class="flex items-center gap-3 px-4 py-3 text-gray-300 rounded-lg font-semibold hover:bg-gray-800 hover:text-white transition-colors">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
@@ -116,6 +125,118 @@
                         </div>
                     </section>
                 </div>
+
+                <!-- Charts Section in Resumen -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6 mb-8">
+                    <!-- Chart 1 -->
+                    <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+                        <h3 class="text-sm font-bold text-gray-800 uppercase tracking-wider mb-6">Ventas por Método de Pago</h3>
+                        <div class="relative h-64 w-full flex justify-center">
+                            <canvas id="salesMethodChart"></canvas>
+                        </div>
+                    </section>
+                    <!-- Chart 2 -->
+                    <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+                        <h3 class="text-sm font-bold text-gray-800 uppercase tracking-wider mb-6">Gastos por Categoría</h3>
+                        <div class="relative h-64 w-full flex justify-center">
+                            <canvas id="expensesCatChart"></canvas>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <div id="tab-contabilidad" class="tab-pane hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                    <!-- Contabilidad Resumen -->
+                    <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+                        <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Total Ingresos</h3>
+                        <p class="text-3xl font-black text-green-600 tracking-tighter" id="accEarnings">$0.00</p>
+                    </section>
+                    <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+                        <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Total Gastos</h3>
+                        <p class="text-3xl font-black text-red-600 tracking-tighter" id="accExpenses">$0.00</p>
+                    </section>
+                    <section class="bg-gray-900 rounded-2xl shadow-sm border border-gray-900 p-8">
+                        <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Beneficio Neto</h3>
+                        <p class="text-3xl font-black text-yellow-500 tracking-tighter" id="accProfit">$0.00</p>
+                    </section>
+                </div>
+
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                    <section class="xl:col-span-1 bg-white rounded-2xl shadow-sm border border-gray-200 p-8 h-fit">
+                        <h3 class="text-sm font-bold text-gray-800 uppercase tracking-wider mb-6">Registrar Gasto</h3>
+                        <form id="expenseForm" onsubmit="handleExpenseSubmit(event)" class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Descripción</label>
+                                <input type="text" id="expDesc" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Monto ($)</label>
+                                <input type="number" id="expAmount" step="0.01" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Categoría</label>
+                                <select id="expCat" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500">
+                                    <option value="Insumos">Insumos (Materia prima)</option>
+                                    <option value="Operacion">Operación (Luz, agua, gas)</option>
+                                    <option value="Personal">Personal (Sueldos, honorarios)</option>
+                                    <option value="Marketing">Marketing / Publicidad</option>
+                                    <option value="Envios">Logística / Envíos</option>
+                                    <option value="Otros">Otros</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="w-full bg-gray-900 text-yellow-500 font-bold uppercase tracking-wider py-3 rounded-lg hover:bg-gray-800 transition">Registrar</button>
+                        </form>
+                    </section>
+
+                    <section class="xl:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-sm font-bold text-gray-800 uppercase tracking-wider">Historial de Gastos</h3>
+                            <button onclick="loadAccounting()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-sm font-bold transition">Actualizar</button>
+                        </div>
+                        <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="border-b border-gray-200 bg-gray-50 sticky top-0">
+                                        <th class="py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Fecha</th>
+                                        <th class="py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Categoría</th>
+                                        <th class="py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Descripción</th>
+                                        <th class="py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Monto</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="expensesList" class="text-sm font-medium divide-y divide-gray-100">
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <div id="tab-menu" class="tab-pane hidden">
+                <section class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-sm font-bold text-gray-800 uppercase tracking-wider">Gestión de Menú</h3>
+                        <button onclick="openMenuModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2">
+                            + Añadir Producto
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="border-b border-gray-200 bg-gray-50">
+                                    <th class="py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Producto</th>
+                                    <th class="py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Categoría</th>
+                                    <th class="py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Precio</th>
+                                    <th class="py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Estado</th>
+                                    <th class="py-3 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="menuList" class="text-sm font-medium divide-y divide-gray-100">
+                                <tr><td colspan="5" class="py-4 text-center text-gray-400 italic">Cargando menú...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
             </div>
 
             <div id="tab-inventario" class="tab-pane hidden">
@@ -217,6 +338,59 @@
         </main>
     </div>
 
+    <!-- Modal for Menu CRUD -->
+    <div id="viewTicketModal" class="fixed inset-0 z-50 hidden bg-gray-900 bg-opacity-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+            <div class="bg-gray-100 px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-yellow-50">
+                <h3 class="text-sm font-black text-gray-900 uppercase tracking-widest display-font">TICKET DE COMPRA</h3>
+                <button onclick="closeViewTicketModal()" class="text-gray-500 hover:text-gray-800 font-bold">✕</button>
+            </div>
+            <div class="p-6 bg-white max-h-[70vh] overflow-y-auto" id="ticketContentPrint">
+                <!-- Ticket se renderiza aquí -->
+            </div>
+            <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+                <button onclick="closeViewTicketModal()" class="px-5 py-2 text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 font-bold rounded-lg transition-colors text-sm uppercase">Cerrar</button>
+                <button onclick="printViewTicket()" class="px-5 py-2 bg-gray-900 hover:bg-gray-800 text-yellow-500 font-bold rounded-lg transition-colors text-sm uppercase shadow">Imprimir</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Menu CRUD -->
+    <div id="menuModal" class="fixed inset-0 z-50 hidden bg-gray-900 bg-opacity-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h3 id="menuModalTitle" class="text-lg font-bold text-gray-900 mb-4">Añadir Producto</h3>
+            <form id="menuForm" onsubmit="handleMenuSubmit(event)">
+                <input type="hidden" id="menuId" value="">
+                
+                <div class="mb-4">
+                    <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Nombre del Producto</label>
+                    <input type="text" id="menuName" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Descripción</label>
+                    <textarea id="menuDesc" rows="3" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"></textarea>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Precio ($)</label>
+                    <input type="number" id="menuPrice" step="0.01" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
+                </div>
+                <div class="mb-6">
+                    <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Categoría</label>
+                    <select id="menuCat" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
+                        <option value="Sushi">Sushi</option>
+                        <option value="Bebida">Bebida</option>
+                        <option value="Complemento">Complemento</option>
+                        <option value="Promo">Promo</option>
+                    </select>
+                </div>
+                <div class="flex justify-end gap-3">
+                    <button type="button" onclick="closeMenuModal()" class="px-5 py-2.5 text-gray-600 bg-gray-100 hover:bg-gray-200 font-bold rounded-lg transition-colors">Cancelar</button>
+                    <button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Modal for Inventory CRUD -->
     <div id="inventoryModal" class="fixed inset-0 z-50 hidden bg-gray-900 bg-opacity-50 flex items-center justify-center">
         <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
@@ -257,6 +431,23 @@
                     document.getElementById('weeklyGanancias').innerText = formatCurrency(dashData.weekly_ganancias || 0);
                     document.getElementById('monthlyGanancias').innerText = formatCurrency(dashData.monthly_ganancias || 0);
                     document.getElementById('contadorOrdenes').innerText = dashData.pending_orders || 0;
+
+                    // Render Sales by Payment Chart if available
+                    if (dashData.sales_by_payment && window.Chart) {
+                        const ctx = document.getElementById('salesMethodChart').getContext('2d');
+                        new Chart(ctx, {
+                            type: 'doughnut',
+                            data: {
+                                labels: dashData.sales_by_payment.map(i => i.metodo_pago),
+                                datasets: [{
+                                    data: dashData.sales_by_payment.map(i => i.amount),
+                                    backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'],
+                                    hoverOffset: 4
+                                }]
+                            },
+                            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                        });
+                    }
                 }
             } catch (err) {
                 console.error("Error cargando dashboard:", err);
@@ -272,6 +463,8 @@
             // Orders Data
             await loadOrders();
             await loadTickets();
+            await loadAccounting();
+            await loadMenu();
             
             // Set initial tab state
             switchTab('resumen', document.querySelector('#sidebarNav a[onclick*="resumen"]'));
@@ -460,6 +653,8 @@
                         ? ``
                         : `<button onclick="markAsDelivered(${o.id})" class="mt-2 bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-1 px-3 rounded shadow transition">Marcar Entregado</button>`;
 
+                    const orderJSON = encodeURIComponent(JSON.stringify(o));
+
                     return `
                     <tr class="hover:bg-gray-50 transition-colors">
                         <td class="py-3 px-4 flex flex-col">
@@ -478,7 +673,10 @@
                         </td>
                         <td class="py-3 px-4 text-right">
                             <div>${statusBadge}</div>
-                            ${actionBtn}
+                            <div class="flex flex-col items-end gap-1 mt-2">
+                                ${actionBtn}
+                                <button onclick="viewTicket('${orderJSON}')" class="bg-gray-800 hover:bg-gray-900 text-white text-xs font-bold py-1 px-3 rounded shadow transition">Ver Ticket</button>
+                            </div>
                         </td>
                     </tr>
                     `;
@@ -596,6 +794,263 @@
             } catch (error) {
                 console.error(error);
                 alert('Error de conexión');
+            }
+        }
+        let accChartInstance = null;
+
+        async function loadAccounting() {
+            try {
+                const res = await fetch('/api/accounting');
+                const data = await res.json();
+                
+                if (!data) return;
+
+                const formatCurrency = (val) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(val);
+                document.getElementById('accEarnings').innerText = formatCurrency(data.total_earnings || 0);
+                document.getElementById('accExpenses').innerText = formatCurrency(data.total_expenses || 0);
+                
+                const profit = (data.total_earnings || 0) - (data.total_expenses || 0);
+                const elProfit = document.getElementById('accProfit');
+                elProfit.innerText = formatCurrency(profit);
+                elProfit.className = profit < 0 ? "text-3xl font-black text-red-500 tracking-tighter" : "text-3xl font-black text-yellow-500 tracking-tighter";
+                
+                // load list
+                const tbody = document.getElementById('expensesList');
+                if (data.expenses && data.expenses.length > 0) {
+                    tbody.innerHTML = data.expenses.map(e => `
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="py-3 px-4 text-xs text-gray-500">${new Date(e.created_at).toLocaleString('es-MX', {dateStyle: 'short', timeStyle: 'short'})}</td>
+                            <td class="py-3 px-4 text-xs font-bold text-gray-700"><span class="bg-gray-200 px-2 py-1 rounded-sm">${e.category}</span></td>
+                            <td class="py-3 px-4 text-sm font-medium text-gray-900">${e.description}</td>
+                            <td class="py-3 px-4 text-sm font-bold text-red-600 text-right">-$${e.amount.toFixed(2)}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-gray-400 italic">No hay gastos registrados</td></tr>';
+                }
+
+                // Render Chart 2: Expenses by category
+                if (data.expenses_by_category && window.Chart) {
+                    const ctx = document.getElementById('expensesCatChart').getContext('2d');
+                    if (accChartInstance) { accChartInstance.destroy(); }
+                    accChartInstance = new Chart(ctx, {
+                        type: 'pie',
+                        data: {
+                            labels: data.expenses_by_category.map(i => i.category),
+                            datasets: [{
+                                data: data.expenses_by_category.map(i => i.amount),
+                                backgroundColor: ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#3b82f6', '#6366f1'],
+                            }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                    });
+                }
+            } catch (err) {
+                console.error("Error cargando contabilidad:", err);
+            }
+        }
+
+        async function handleExpenseSubmit(event) {
+            event.preventDefault();
+            const desc = document.getElementById('expDesc').value;
+            const amount = parseFloat(document.getElementById('expAmount').value);
+            const cat = document.getElementById('expCat').value;
+
+            try {
+                const res = await fetch('/api/accounting', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ description: desc, amount: amount, category: cat })
+                });
+                
+                if (res.ok) {
+                    document.getElementById('expenseForm').reset();
+                    await loadAccounting();
+                } else {
+                    alert("Error registrando gasto");
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Error de conexión");
+            }
+        }
+
+        /* LOGICA CRUD MENU */
+        async function loadMenu() {
+            try {
+                const res = await fetch('/api/menu');
+                const menu = await res.json();
+                const tbody = document.getElementById('menuList');
+                if (menu.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-gray-400 italic">No hay productos</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = menu.map(m => `
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="py-3 px-4 text-sm font-bold text-gray-900">
+                            ${m.name}
+                            <div class="text-xs font-normal text-gray-400 max-w-[200px] truncate">${m.description}</div>
+                        </td>
+                        <td class="py-3 px-4"><span class="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded">${m.category}</span></td>
+                        <td class="py-3 px-4 text-sm font-bold text-gray-700">$${m.price.toFixed(2)}</td>
+                        <td class="py-3 px-4">
+                            <button onclick="toggleMenu(${m.id}, ${!m.is_active})" class="px-2 py-1 text-xs font-bold rounded ${m.is_active ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-red-100 text-red-700 hover:bg-red-200'}">
+                                ${m.is_active ? 'Activo' : 'Inactivo'}
+                            </button>
+                        </td>
+                        <td class="py-3 px-4 text-right space-x-2">
+                            <button onclick="editMenu(${m.id}, '${m.name.replace(/'/g, "\\'")}', '${m.description.replace(/'/g, "\\'")}', ${m.price}, '${m.category}')" class="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded transition">Editar</button>
+                            <button onclick="deleteMenu(${m.id})" class="text-xs font-bold text-red-600 hover:text-red-800 bg-red-50 px-2 py-1 rounded transition">Eliminar</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error("Error loading menu:", err);
+            }
+        }
+
+        function openMenuModal() {
+            document.getElementById('menuModalTitle').innerText = 'Añadir Producto';
+            document.getElementById('menuForm').reset();
+            document.getElementById('menuId').value = '';
+            document.getElementById('menuModal').classList.remove('hidden');
+        }
+
+        function closeMenuModal() {
+            document.getElementById('menuModal').classList.add('hidden');
+        }
+
+        // Logic for viewing ticket breakdown
+        function viewTicket(encodedO) {
+            const o = JSON.parse(decodeURIComponent(encodedO));
+            const subtotal = parseFloat(o.subtotal || 0).toFixed(2);
+            const tax = parseFloat(o.tax || 0).toFixed(2);
+            const shipping = parseFloat(o.shipping || 0).toFixed(2);
+            const total = parseFloat(o.total || 0).toFixed(2);
+            const date = new Date(o.fecha_pedido).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+
+            const content = `
+                <div class="text-center font-black text-xl mb-1 tracking-tighter">SUSHI LOSPLEBES</div>
+                <div class="text-center text-xs text-gray-500 mb-6 border-b border-dashed border-gray-300 pb-4">ORDEN #${o.id} - ${date}</div>
+                
+                <div class="text-sm font-bold text-gray-800 mb-1">CLIENTE:</div>
+                <div class="text-sm text-gray-700 mb-4">${o.nombre} <br> <span class="text-xs text-gray-500">${o.telefono}</span></div>
+                
+                <div class="text-sm font-bold text-gray-800 mb-1">ENTREGA:</div>
+                <div class="text-sm text-gray-700 mb-4">${o.direccion_entrega}</div>
+
+                <div class="text-sm font-bold text-gray-800 mb-1 border-b border-dashed border-gray-300 pb-1">PEDIDO:</div>
+                <div class="text-sm text-gray-700 mb-6 py-2 whitespace-pre-wrap">${o.detalles_orden}</div>
+                
+                <div class="flex justify-between text-sm text-gray-600 mb-1">
+                    <span>SUBTOTAL:</span>
+                    <span>$${subtotal}</span>
+                </div>
+                <div class="flex justify-between text-sm text-gray-600 mb-1">
+                    <span>IVA (16%):</span>
+                    <span>$${tax}</span>
+                </div>
+                <div class="flex justify-between text-sm text-gray-600 mb-4 border-b border-dashed border-gray-300 pb-4">
+                    <span>ENVÍO:</span>
+                    <span>$${shipping}</span>
+                </div>
+                <div class="flex justify-between text-lg font-black text-gray-900 mb-6">
+                    <span>TOTAL:</span>
+                    <span>$${total}</span>
+                </div>
+                <div class="text-center text-xs font-bold text-gray-500 bg-gray-100 p-2 rounded">
+                    MÉTODO: ${o.metodo_pago}
+                </div>
+            `;
+            document.getElementById('ticketContentPrint').innerHTML = content;
+            document.getElementById('viewTicketModal').classList.remove('hidden');
+        }
+
+        function closeViewTicketModal() {
+            document.getElementById('viewTicketModal').classList.add('hidden');
+        }
+
+        function printViewTicket() {
+            const content = document.getElementById('ticketContentPrint').innerHTML;
+            const printWindow = window.open('', '', 'height=600,width=400');
+            printWindow.document.write('<html><head><title>Ticket #' + document.getElementById('ticketContentPrint').innerText.split('#')[1].split(' ')[0] + '</title>');
+            printWindow.document.write('<script src="https://cdn.tailwindcss.com"><\/script>');
+            printWindow.document.write('</head><body class="p-8 font-mono bg-white text-black">');
+            printWindow.document.write(content);
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+            printWindow.focus();
+            setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+        }
+
+        function editMenu(id, name, desc, price, cat) {
+            document.getElementById('menuModalTitle').innerText = 'Editar Producto';
+            document.getElementById('menuId').value = id;
+            document.getElementById('menuName').value = name;
+            document.getElementById('menuDesc').value = desc;
+            document.getElementById('menuPrice').value = price;
+            document.getElementById('menuCat').value = cat;
+            document.getElementById('menuModal').classList.remove('hidden');
+        }
+
+        async function handleMenuSubmit(e) {
+            e.preventDefault();
+            const id = document.getElementById('menuId').value;
+            const payload = {
+                name: document.getElementById('menuName').value,
+                description: document.getElementById('menuDesc').value,
+                price: parseFloat(document.getElementById('menuPrice').value),
+                category: document.getElementById('menuCat').value
+            };
+
+            let method = 'POST';
+            if (id) {
+                method = 'PUT';
+                payload.id = parseInt(id);
+            }
+
+            try {
+                const res = await fetch('/api/menu', {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    closeMenuModal();
+                    await loadMenu();
+                } else {
+                    alert('Error guardando producto');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Error de conexión');
+            }
+        }
+
+        async function deleteMenu(id) {
+            if (!confirm('¿Seguro de eliminar este producto?')) return;
+            try {
+                const res = await fetch('/api/menu', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id })
+                });
+                if (res.ok) await loadMenu();
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function toggleMenu(id, newStatus) {
+            try {
+                const res = await fetch('/api/menu', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id, action: 'toggle', is_active: newStatus })
+                });
+                if (res.ok) await loadMenu();
+            } catch (err) {
+                console.error(err);
             }
         }
     </script>

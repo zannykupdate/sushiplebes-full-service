@@ -77,6 +77,22 @@ func crearTablasAutomaticas() {
 		order_id INT,
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);
+	CREATE TABLE IF NOT EXISTS menu_items (
+		id SERIAL PRIMARY KEY,
+		name VARCHAR(100) NOT NULL,
+		description TEXT,
+		price NUMERIC NOT NULL,
+		category VARCHAR(50) DEFAULT 'Sushi',
+		is_active BOOLEAN DEFAULT TRUE,
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE TABLE IF NOT EXISTS expenses (
+		id SERIAL PRIMARY KEY,
+		description TEXT NOT NULL,
+		amount NUMERIC NOT NULL,
+		category VARCHAR(100),
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+	);
 	CREATE TABLE IF NOT EXISTS support_tickets (
 		id SERIAL PRIMARY KEY,
 		telefono VARCHAR(50),
@@ -129,6 +145,25 @@ func seedInventory(db *pgxpool.Pool) {
 			}
 		}
 		log.Println("✅ INVENTARIO SEMBRADO PARA 10 SUSHIS DE PRUEBA")
+	}
+
+	var menuCount int
+	db.QueryRow(context.Background(), "SELECT COUNT(*) FROM menu_items").Scan(&menuCount)
+	if menuCount == 0 {
+		menuItems := []struct {
+			name  string
+			desc  string
+			price float64
+			cat   string
+		}{
+			{"Rollo Estándar", "Rollo clásico con ingredientes básicos", 120.0, "Sushi"},
+			{"Rollo Especial", "Rollo con mariscos premium y toppings", 150.0, "Sushi"},
+			{"Té Helado", "Té helado de la casa", 35.0, "Bebida"},
+		}
+		for _, m := range menuItems {
+			db.Exec(context.Background(), "INSERT INTO menu_items (name, description, price, category) VALUES ($1, $2, $3, $4)", m.name, m.desc, m.price, m.cat)
+		}
+		log.Println("✅ MENÚ SEMBRADO")
 	}
 }
 
