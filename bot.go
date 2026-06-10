@@ -134,7 +134,11 @@ func ProcessMessage(phone string, text string) {
 		SendWhatsAppImage(phone, menuUrl)
 	}
 
-	if decision.IsOrderComplete {
+	if decision.RequiresHuman {
+		if DB != nil {
+			DB.Exec(context.Background(), "INSERT INTO support_tickets (telefono, mensaje) VALUES ($1, $2)", phone, text)
+		}
+	} else if decision.IsOrderComplete {
 		customerName := decision.CustomerName
 		if customerName == "" {
 			customerName = "Cliente " + phone // Fallback
@@ -142,7 +146,7 @@ func ProcessMessage(phone string, text string) {
 
 		// La orden está lista para meter a Base de datos y Monitor
 		if DB != nil {
-			id, err := InsertOrder(context.Background(), customerName, phone, decision.OrderDetails, decision.DeliveryAddress, decision.PaymentMethod, decision.Total, decision.InventoryToRemove)
+			id, err := InsertOrder(context.Background(), customerName, phone, decision.OrderDetails, decision.DeliveryAddress, decision.PaymentMethod, decision.Subtotal, decision.Tax, decision.Shipping, decision.Total, decision.InventoryToRemove)
 			if err == nil {
 				orderData := map[string]interface{}{
 					"id":                id,
@@ -151,6 +155,9 @@ func ProcessMessage(phone string, text string) {
 					"detalles_orden":    decision.OrderDetails,
 					"direccion_entrega": decision.DeliveryAddress,
 					"metodo_pago":       decision.PaymentMethod,
+					"subtotal":          decision.Subtotal,
+					"tax":               decision.Tax,
+					"shipping":          decision.Shipping,
 					"total":             decision.Total,
 				}
 				EmitOrder(orderData) // trigger SSE to kitchen
@@ -166,6 +173,9 @@ func ProcessMessage(phone string, text string) {
 				"detalles_orden":    decision.OrderDetails,
 				"direccion_entrega": decision.DeliveryAddress,
 				"metodo_pago":       decision.PaymentMethod,
+				"subtotal":          decision.Subtotal,
+				"tax":               decision.Tax,
+				"shipping":          decision.Shipping,
 				"total":             decision.Total,
 			}
 			EmitOrder(orderData)

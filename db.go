@@ -64,6 +64,9 @@ func crearTablasAutomaticas() {
 		detalles_orden TEXT,
 		direccion_entrega TEXT,
 		metodo_pago VARCHAR(50),
+		subtotal NUMERIC,
+		tax NUMERIC,
+		shipping NUMERIC,
 		total NUMERIC,
 		status VARCHAR(50) DEFAULT 'PENDING',
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -72,6 +75,13 @@ func crearTablasAutomaticas() {
 		id SERIAL PRIMARY KEY,
 		amount NUMERIC NOT NULL,
 		order_id INT,
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE TABLE IF NOT EXISTS support_tickets (
+		id SERIAL PRIMARY KEY,
+		telefono VARCHAR(50),
+		mensaje TEXT,
+		status VARCHAR(50) DEFAULT 'OPEN',
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);
 	`
@@ -122,33 +132,27 @@ func seedInventory(db *pgxpool.Pool) {
 	}
 }
 
-func InsertOrder(ctx context.Context, nombre, telefono, detalles, direccion, pago string, total float64, inventoryToRemove []string) (int, error) {
+func InsertOrder(ctx context.Context, nombre, telefono, detalles, direccion, pago string, subtotal, tax, shipping, total float64, inventoryToRemove map[string]int) (int, error) {
 	var id int
-	err := DB.QueryRow(ctx, "INSERT INTO orders (nombre, telefono, detalles_orden, direccion_entrega, metodo_pago, total) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-		nombre, telefono, detalles, direccion, pago, total).Scan(&id)
+	err := DB.QueryRow(ctx, "INSERT INTO orders (nombre, telefono, detalles_orden, direccion_entrega, metodo_pago, subtotal, tax, shipping, total) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
+		nombre, telefono, detalles, direccion, pago, subtotal, tax, shipping, total).Scan(&id)
 	
 	if err == nil {
 		// impactar ganancias
 		DB.Exec(ctx, "INSERT INTO earnings (amount, order_id) VALUES ($1, $2)", total, id)
 		
 		// Descontar inventario estructurado por Gemini
-		for _, item := range inventoryToRemove {
-			// El item es algo como "arroz 265g", insertarlo restando en la tabla.
-			// Pero si el sistema real usa items fijos, podemos usar un UPDATE ... WHERE item = 'arroz 265g'.
-			// Ya que es un inventario raw para MVP, dejaremos un log o intentar separar el string.
-			// Como SQLite/Postgres no tiene auto-parseo sin lógica, vamos a insertar los raw como deductivos en una misma tabla 
-			// Si el item existe, bajamos cantidad (asumiendo que parsear raw "arroz 265g" es dificil, mejor restamos 1 a la variable global y guardamos el log).
-			// Forma simplificada:
-			
-			// Extract just the name vs quantity or just insert it raw as an item that was consumed.
-			// The instructions didn't specify table schema exactly other than: id, item, quantity
-			// We can simply add a negative record or do UPSERT.
-			
+		for item, count := range inventoryToRemove {
+			// Update the quantity if the item exists
 			query := `
-				INSERT INTO inventory (item, quantity) 
-				VALUES ($1, -1) 
-				ON CONFLICT (id) DO NOTHING`
-			DB.Exec(ctx, query, item)
+				UPDATE inventory 
+				SET quantity = quantity - $1 
+				WHERE item = $2`
+			tag, errExec := DB.Exec(ctx, query, count, item)
+			if errExec == nil && tag.RowsAffected() == 0 {
+			    // If it didn't exist, we add it with negative quantity as a fallback.
+			    DB.Exec(ctx, "INSERT INTO inventory (item, quantity) VALUES ($1, $2)", item, -count)
+			}
 		}
 	}
 	return id, err

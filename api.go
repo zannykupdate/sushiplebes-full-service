@@ -31,7 +31,7 @@ func HandleOrdersAPI(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case "GET":
-		rows, err := DB.Query(context.Background(), "SELECT id, nombre, telefono, detalles_orden, direccion_entrega, metodo_pago, total, status, created_at FROM orders ORDER BY id DESC")
+		rows, err := DB.Query(context.Background(), "SELECT id, nombre, telefono, detalles_orden, direccion_entrega, metodo_pago, subtotal, tax, shipping, total, status, created_at FROM orders ORDER BY id DESC")
 		if err != nil {
 			log.Printf("ERROR: GET /api/orders failed: %v", err)
 			http.Error(w, `{"error": "Failed to fetch orders"}`, http.StatusInternalServerError)
@@ -43,9 +43,9 @@ func HandleOrdersAPI(w http.ResponseWriter, r *http.Request) {
 		for rows.Next() {
 			var id int
 			var nombre, telefono, detalles_orden, direccion_entrega, metodo_pago, status string
-			var total float64
+			var subtotal, tax, shipping, total float64
 			var createdAt time.Time
-			if err := rows.Scan(&id, &nombre, &telefono, &detalles_orden, &direccion_entrega, &metodo_pago, &total, &status, &createdAt); err != nil {
+			if err := rows.Scan(&id, &nombre, &telefono, &detalles_orden, &direccion_entrega, &metodo_pago, &subtotal, &tax, &shipping, &total, &status, &createdAt); err != nil {
 				continue
 			}
 			orders = append(orders, map[string]interface{}{
@@ -55,6 +55,9 @@ func HandleOrdersAPI(w http.ResponseWriter, r *http.Request) {
 				"detalles_orden":    detalles_orden,
 				"direccion_entrega": direccion_entrega,
 				"metodo_pago":       metodo_pago,
+				"subtotal":          subtotal,
+				"tax":               tax,
+				"shipping":          shipping,
 				"total":             total,
 				"status":            status,
 				"fecha_pedido":      createdAt.Format(time.RFC3339),
@@ -77,9 +80,12 @@ func HandleOrdersAPI(w http.ResponseWriter, r *http.Request) {
 		detalles, _ := req["detalles_orden"].(string)
 		direccion, _ := req["direccion_entrega"].(string)
 		pago, _ := req["metodo_pago"].(string)
+		subtotal, _ := req["subtotal"].(float64)
+		tax, _ := req["tax"].(float64)
+		shipping, _ := req["shipping"].(float64)
 		total, _ := req["total"].(float64)
 
-		id, err := InsertOrder(context.Background(), nombre, telefono, detalles, direccion, pago, total, []string{})
+		id, err := InsertOrder(context.Background(), nombre, telefono, detalles, direccion, pago, subtotal, tax, shipping, total, map[string]int{})
 		if err != nil {
 			http.Error(w, `{"error": "Failed to insert order"}`, http.StatusInternalServerError)
 			return
@@ -309,4 +315,74 @@ func HandleDashboardAPI(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+func HandleTicketsAPI(w http.ResponseWriter, r *http.Request) {
+	enableCors(&w)
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	if DB == nil {
+		http.Error(w, `{"error": "Database not connected"}`, http.StatusInternalServerError)
+		return
+	}
+
+	if r.Method == "GET" {
+		rows, err := DB.Query(context.Background(), "SELECT id, telefono, mensaje, status, created_at FROM support_tickets ORDER BY id DESC")
+		if err != nil {
+			log.Printf("ERROR: GET /api/tickets failed: %v", err)
+			http.Error(w, `{"error": "Failed to fetch tickets"}`, http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var tickets []map[string]interface{}
+		for rows.Next() {
+			var id int
+			var tel, mensaje, status string
+			var created time.Time
+			err := rows.Scan(&id, &tel, &mensaje, &status, &created)
+			if err != nil {
+				continue
+			}
+			tickets = append(tickets, map[string]interface{}{
+				"id":         id,
+				"telefono":   tel,
+				"mensaje":    mensaje,
+				"status":     status,
+				"created_at": created.Format(time.RFC3339),
+			})
+		}
+		if tickets == nil {
+			tickets = make([]map[string]interface{}, 0)
+		}
+		json.NewEncoder(w).Encode(tickets)
+		return
+	} else if r.Method == "PUT" {
+		var req map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error": "Invalid body"}`, http.StatusBadRequest)
+			return
+		}
+		idf, ok := req["id"].(float64)
+		if !ok {
+			http.Error(w, `{"error": "Invalid ID"}`, http.StatusBadRequest)
+			return
+		}
+		status, _ := req["status"].(string)
+
+		_, err := DB.Exec(context.Background(), "UPDATE support_tickets SET status=$1 WHERE id=$2", status, int(idf))
+		if err != nil {
+			http.Error(w, `{"error": "Update failed"}`, http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"success": true}`))
+		return
+	}
+
+	http.Error(w, `{"error": "Method not allowed"}`, http.StatusMethodNotAllowed)
 }

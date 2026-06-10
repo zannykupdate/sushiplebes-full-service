@@ -353,6 +353,13 @@
             writeText("\n");
 
             writeText("-".repeat(32) + "\n");
+            
+            // Desglose
+            writeText(padRight("SUBTOTAL:", 15) + padLeft("$" + parseFloat(pedido.subtotal || 0).toFixed(2), 17) + "\n");
+            writeText(padRight("IVA (16%):", 15) + padLeft("$" + parseFloat(pedido.tax || 0).toFixed(2), 17) + "\n");
+            writeText(padRight("ENVIO:", 15) + padLeft("$" + parseFloat(pedido.shipping || 0).toFixed(2), 17) + "\n");
+
+            writeText("-".repeat(32) + "\n");
             writeCmd(BOLD_ON);
             writeText(padRight("TOTAL:", 15) + padLeft("$" + parseFloat(pedido.total || 0).toFixed(2), 17) + "\n");
             writeCmd(BOLD_OFF);
@@ -371,7 +378,7 @@
 
             writeText("\n" + "=".repeat(32) + "\n");
             writeCmd(ALIGN_CENTER);
-            writeText("IVA INCLUIDO\nQUEJAS PROFECO: 800 468 8722\nGRACIAS POR TU COMPRA\n\n\n\n\n");
+            writeText("*** ATENCION ***\nESTE TICKET NO ES UN\nCOMPROBANTE FISCAL\n\n¡GRACIAS POR TU COMPRA!\n\n\n\n\n");
             writeCmd(CUT);
 
             return buffers;
@@ -437,6 +444,11 @@
                 ticket += "\n";
 
                 ticket += "-".repeat(32) + "\n";
+                ticket += padR("SUBTOTAL:", 15) + padL("$" + parseFloat(ped.subtotal || 0).toFixed(2), 17) + "\n";
+                ticket += padR("IVA (16%):", 15) + padL("$" + parseFloat(ped.tax || 0).toFixed(2), 17) + "\n";
+                ticket += padR("ENVIO:", 15) + padL("$" + parseFloat(ped.shipping || 0).toFixed(2), 17) + "\n";
+
+                ticket += "-".repeat(32) + "\n";
                 ticket += padR("TOTAL:", 15) + padL("$" + parseFloat(ped.total || 0).toFixed(2), 17) + "\n";
                 ticket += padR("PAGO REF:", 15) + padL(ped.metodo_pago || "Efectivo", 17) + "\n";
                 
@@ -446,8 +458,9 @@
                 for(let i=0; i<dir.length; i+=32) { ticket += padR(dir.substring(i, i+32), 32) + "\n"; }
 
                 ticket += "\n" + "=".repeat(32) + "\n";
-                ticket += center("IVA INCLUIDO", 32) + "\n";
-                ticket += center("QUEJAS PROFECO: 800 468 8722", 32) + "\n";
+                ticket += center("*** ATENCION ***", 32) + "\n";
+                ticket += center("ESTE TICKET NO ES UN", 32) + "\n";
+                ticket += center("COMPROBANTE FISCAL", 32) + "\n\n";
                 ticket += center("¡GRACIAS POR TU COMPRA!", 32) + "\n\n\n\n";
                 return ticket;
             };
