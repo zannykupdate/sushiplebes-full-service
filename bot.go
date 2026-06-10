@@ -135,13 +135,18 @@ func ProcessMessage(phone string, text string) {
 	}
 
 	if decision.IsOrderComplete {
+		customerName := decision.CustomerName
+		if customerName == "" {
+			customerName = "Cliente " + phone // Fallback
+		}
+
 		// La orden está lista para meter a Base de datos y Monitor
 		if DB != nil {
-			id, err := InsertOrder(context.Background(), phone, decision.OrderDetails, decision.DeliveryAddress, decision.PaymentMethod, decision.Total, decision.InventoryToRemove)
+			id, err := InsertOrder(context.Background(), customerName, phone, decision.OrderDetails, decision.DeliveryAddress, decision.PaymentMethod, decision.Total, decision.InventoryToRemove)
 			if err == nil {
 				orderData := map[string]interface{}{
 					"id":                id,
-					"nombre":            "Cliente " + phone,
+					"nombre":            customerName,
 					"telefono":          phone,
 					"detalles_orden":    decision.OrderDetails,
 					"direccion_entrega": decision.DeliveryAddress,
@@ -156,7 +161,7 @@ func ProcessMessage(phone string, text string) {
 			// Fallback local mock
 			orderData := map[string]interface{}{
 				"id":                999,
-				"nombre":            "Cliente Local",
+				"nombre":            customerName,
 				"telefono":          phone,
 				"detalles_orden":    decision.OrderDetails,
 				"direccion_entrega": decision.DeliveryAddress,

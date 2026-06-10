@@ -15,6 +15,7 @@ type GeminiDecision struct {
 	ResponseText      string   `json:"response_text"`
 	SendMenuImage     bool     `json:"send_menu_image"`
 	IsOrderComplete   bool     `json:"is_order_complete"`
+	CustomerName      string   `json:"customer_name"`
 	OrderDetails      string   `json:"order_details"`
 	DeliveryAddress   string   `json:"delivery_address"`
 	PaymentMethod     string   `json:"payment_method"`
@@ -65,8 +66,11 @@ Reglas de negocio:
 - Si el cliente te saluda por primera vez (el historial está vacío o solo tiene un mensaje), DEBES darle la bienvenida al restaurante SUSHI LOSPLEBES de manera muy amable e indicar "send_menu_image" = true en tu JSON para que el sistema le envíe la foto del menú.
 - Métodos de pago aceptados: "Efectivo" o "Transferencia".
 - Si el cliente elige "Transferencia", pásale la CLABE: 012345678912345678 a nombre de SUSHI LOSPLEBES y dile que envíe la foto del comprobante por aquí, su orden será validada por un humano. El "payment_method" en el JSON debe ser "TRANSFERENCIA (Por validar comprobante)".
-- Para lograr "is_order_complete" = true, debes haber recolectado: qué quieren comer, si es para recoger (PICKUP) o enviar a domicilio (con dirección), y el método de pago (Efectivo o Transferencia).
-- Mientras "is_order_complete" sea false, en "response_text" hazles las preguntas necesarias (ej. "¿Gusta envío a domicilio o pasaría por él? ¿Y cómo desea pagar, Efectivo o Transferencia?").
+- IMPORTANTE: SOLO tenemos servicio de envío a domicilio (DELIVERY). NO contamos con sucursal física para comer ni para pasar a recoger (NO PICKUP). Siempre asume que es para envío a domicilio.
+- Para lograr "is_order_complete" = true, debes haber recolectado: qué quieren comer, su dirección de entrega a domicilio completa (recabando colonia, calle, número exterior/interior y referencias precisas de la casa), y el método de pago (Efectivo o Transferencia).
+- Al tomar una orden para entrega a domicilio, APLICA LÓGICA DE VALIDACIÓN ESTRICTA: la dirección DEBE incluir de forma explícita 1) Calle, 2) Número, 3) Colonia, y 4) Referencias. Si el cliente omite alguno de estos 4 elementos, NO pongas "is_order_complete" en true, y automáticamente responde solicitando SOLAMENTE el dato que falta. (Ej. "Nos falta el número de su casa y colonia para el envío, ¿podría proporcionarlo?").
+- PREGUNTA SIEMPRE el nombre a quien irá la orden si no te lo han proporcionado.
+- Mientras "is_order_complete" sea false, en "response_text" hazles las preguntas correspondientes (ej. "¿Para agendar su envío, me podría proporcionar su colonia, calle, número de casa y alguna referencia como el color de la fachada?").
 
 Descuento de Inventario:
 Cuando el pedido esté completado ("is_order_complete" = true), calcula los insumos que se consumirán por cada rollo pedido y ponlos en la lista "inventory_to_remove". Por cada 1 rollo de sushi debes descontar aproximadamente:
@@ -91,8 +95,9 @@ ESTRUCTURA STRICTA MULTI-PROPOSITO (SIEMPRE RETORNA JSON en responseMimeType="ap
   "response_text": "Texto a enviar por WhatsApp.",
   "send_menu_image": boolean,
   "is_order_complete": boolean,
+  "customer_name": "Nombre completo o de pila del cliente, ej: Joaquin",
   "order_details": "Ej: 1x Rollo Empanizado, 1x Té helado. Nota: sin cebollín.",
-  "delivery_address": "Calle Falsa 123 o 'PICKUP'",
+  "delivery_address": "Col. Centro, Calle Falsa 123, Casa Blanca con reja",
   "payment_method": "Efectivo",
   "total": 160.0,
   "inventory_to_remove": ["arroz 265g", "queso_philadelphia 30g", "contenedor_7x7 1"]

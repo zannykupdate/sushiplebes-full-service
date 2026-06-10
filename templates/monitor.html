@@ -276,8 +276,6 @@
             const BOLD_OFF = [0x1b, 0x45, 0x00];
             const CUT = [0x1d, 0x56, 0x41, 0x03];
 
-            const isPickup = typeof pedido.direccion_entrega === "string" && pedido.direccion_entrega.toUpperCase().includes("PICKUP");
-
             const padRight = (str, len) => str.length >= len ? str.substring(0,len) : str + ' '.repeat(len - str.length);
             const padLeft = (str, len) => str.length >= len ? str.substring(0,len) : ' '.repeat(len - str.length) + str;
 
@@ -287,7 +285,12 @@
             writeText("SUSHI LOSPLEBES\n");
             writeCmd(BOLD_OFF);
             writeText("RFC: SPL190101XYZ\nTicket de Comanda\n");
-            writeText("-".repeat(32) + "\n");
+            
+            // Add date
+            const dateStr = new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+            writeText(dateStr + "\n");
+            
+            writeText("=".repeat(32) + "\n");
             
             writeCmd(ALIGN_LEFT);
             writeText(padRight("Orden ID: " + pedido.id, 32) + "\n");
@@ -296,38 +299,39 @@
             
             writeCmd(ALIGN_CENTER);
             writeCmd(BOLD_ON);
-            writeText("-".repeat(32) + "\n");
-            writeText(isPickup ? "** PICKUP **\n" : "** DELIVERY **\n");
-            writeText("-".repeat(32) + "\n");
+            writeText("=".repeat(32) + "\n");
+            writeText(">> * DELIVERY * <<\n");
+            writeText("=".repeat(32) + "\n\n");
             writeCmd(BOLD_OFF);
 
             writeCmd(ALIGN_LEFT);
-            writeText("Detalles del pedido:\n");
+            writeCmd(BOLD_ON);
+            writeText("DETALLES DEL PEDIDO:\n");
+            writeCmd(BOLD_OFF);
             let detalles = normalizeText(pedido.detalles_orden || "");
             for(let i=0; i<detalles.length; i+=32) {
                 writeText(padRight(detalles.substring(i, i+32), 32) + "\n");
             }
+            writeText("\n");
 
             writeText("-".repeat(32) + "\n");
             writeCmd(BOLD_ON);
-            writeText(padRight("Total:", 15) + padLeft("$" + parseFloat(pedido.total || 0).toFixed(2), 17) + "\n");
+            writeText(padRight("TOTAL:", 15) + padLeft("$" + parseFloat(pedido.total || 0).toFixed(2), 17) + "\n");
             writeCmd(BOLD_OFF);
-            writeText(padRight("Pago Ref:", 15) + padLeft(pedido.metodo_pago || "Efectivo", 17) + "\n");
+            writeText(padRight("PAGO REF:", 15) + padLeft(pedido.metodo_pago || "Efectivo", 17) + "\n");
 
-            if (!isPickup) {
-                writeText("-".repeat(32) + "\n");
-                writeCmd(ALIGN_CENTER);
-                writeCmd(BOLD_ON);
-                writeText("DIRECCION DE ENTREGA\n");
-                writeCmd(BOLD_OFF);
-                
-                let dir = normalizeText(pedido.direccion_entrega || "");
-                for(let i=0; i<dir.length; i+=32) {
-                    writeText(padRight(dir.substring(i, i+32), 32) + "\n");
-                }
+            writeText("\n");
+            writeCmd(ALIGN_CENTER);
+            writeCmd(BOLD_ON);
+            writeText("----- DIRECCION -----\n");
+            writeCmd(BOLD_OFF);
+            
+            let dir = normalizeText(pedido.direccion_entrega || "");
+            for(let i=0; i<dir.length; i+=32) {
+                writeText(padRight(dir.substring(i, i+32), 32) + "\n");
             }
 
-            writeText("=".repeat(32) + "\n");
+            writeText("\n" + "=".repeat(32) + "\n");
             writeCmd(ALIGN_CENTER);
             writeText("IVA INCLUIDO\nQUEJAS PROFECO: 800 468 8722\nGRACIAS POR TU COMPRA\n\n\n\n\n");
             writeCmd(CUT);
@@ -373,36 +377,37 @@
                     return ' '.repeat(left) + str + ' '.repeat(len - str.length - left);
                 };
 
+                const dateStr = new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+
                 let ticket = "\n";
                 ticket += center("SUSHI LOSPLEBES", 32) + "\n";
                 ticket += center("RFC: SPL190101XYZ", 32) + "\n";
-                ticket += center("Ticket de Comanda/Venta", 32) + "\n";
-                ticket += "-".repeat(32) + "\n";
+                ticket += center("Ticket de Comanda", 32) + "\n";
+                ticket += center(dateStr, 32) + "\n";
+                ticket += "=".repeat(32) + "\n";
                 ticket += padR("Orden ID: " + ped.id, 32) + "\n";
                 ticket += padR("Cliente: " + ped.nombre, 32) + "\n";
                 ticket += padR("Tel: " + ped.telefono, 32) + "\n";
                 
-                const pick = typeof ped.direccion_entrega === "string" && ped.direccion_entrega.toUpperCase().includes("PICKUP");
-                ticket += "-".repeat(32) + "\n";
-                ticket += center(pick ? "** PICKUP **" : "** DELIVERY **", 32) + "\n";
-                ticket += "-".repeat(32) + "\n";
+                ticket += "=".repeat(32) + "\n";
+                ticket += center(">> * DELIVERY * <<", 32) + "\n";
+                ticket += "=".repeat(32) + "\n\n";
                 
-                ticket += padR("Detalles del pedido:", 32) + "\n";
+                ticket += padR("DETALLES DEL PEDIDO:", 32) + "\n";
                 let dtls = normalizeText(ped.detalles_orden || "");
                 for(let i=0; i<dtls.length; i+=32) { ticket += padR(dtls.substring(i, i+32), 32) + "\n"; }
+                ticket += "\n";
 
                 ticket += "-".repeat(32) + "\n";
-                ticket += padR("Total:", 15) + padL("$" + parseFloat(ped.total || 0).toFixed(2), 17) + "\n";
-                ticket += padR("Pago Ref:", 15) + padL(ped.metodo_pago || "Efectivo", 17) + "\n";
+                ticket += padR("TOTAL:", 15) + padL("$" + parseFloat(ped.total || 0).toFixed(2), 17) + "\n";
+                ticket += padR("PAGO REF:", 15) + padL(ped.metodo_pago || "Efectivo", 17) + "\n";
                 
-                if (!pick) {
-                    ticket += "-".repeat(32) + "\n";
-                    ticket += center("DIRECCION DE ENTREGA", 32) + "\n";
-                    let dir = normalizeText(ped.direccion_entrega || "");
-                    for(let i=0; i<dir.length; i+=32) { ticket += padR(dir.substring(i, i+32), 32) + "\n"; }
-                }
+                ticket += "\n";
+                ticket += center("----- DIRECCION -----", 32) + "\n";
+                let dir = normalizeText(ped.direccion_entrega || "");
+                for(let i=0; i<dir.length; i+=32) { ticket += padR(dir.substring(i, i+32), 32) + "\n"; }
 
-                ticket += "=".repeat(32) + "\n";
+                ticket += "\n" + "=".repeat(32) + "\n";
                 ticket += center("IVA INCLUIDO", 32) + "\n";
                 ticket += center("QUEJAS PROFECO: 800 468 8722", 32) + "\n";
                 ticket += center("¡GRACIAS POR TU COMPRA!", 32) + "\n\n\n\n";

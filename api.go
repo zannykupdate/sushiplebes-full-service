@@ -72,13 +72,14 @@ func HandleOrdersAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		
+		nombre, _ := req["nombre"].(string)
 		telefono, _ := req["telefono"].(string)
 		detalles, _ := req["detalles_orden"].(string)
 		direccion, _ := req["direccion_entrega"].(string)
 		pago, _ := req["metodo_pago"].(string)
 		total, _ := req["total"].(float64)
 
-		id, err := InsertOrder(context.Background(), telefono, detalles, direccion, pago, total, []string{})
+		id, err := InsertOrder(context.Background(), nombre, telefono, detalles, direccion, pago, total, []string{})
 		if err != nil {
 			http.Error(w, `{"error": "Failed to insert order"}`, http.StatusInternalServerError)
 			return

@@ -122,10 +122,10 @@ func seedInventory(db *pgxpool.Pool) {
 	}
 }
 
-func InsertOrder(ctx context.Context, telefono, detalles, direccion, pago string, total float64, inventoryToRemove []string) (int, error) {
+func InsertOrder(ctx context.Context, nombre, telefono, detalles, direccion, pago string, total float64, inventoryToRemove []string) (int, error) {
 	var id int
 	err := DB.QueryRow(ctx, "INSERT INTO orders (nombre, telefono, detalles_orden, direccion_entrega, metodo_pago, total) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-		"Cliente "+telefono, telefono, detalles, direccion, pago, total).Scan(&id)
+		nombre, telefono, detalles, direccion, pago, total).Scan(&id)
 	
 	if err == nil {
 		// impactar ganancias
