@@ -113,11 +113,23 @@ func SendWhatsAppImage(phone string, imageUrl string) error {
 
 func ProcessMessage(phone string, text string) {
 	log.Printf("Bot received message from %s: %s", phone, text)
+
+	// Horario de atención: 11:00 AM a 11:00 PM (Hora Hermosillo / UTC-7)
+	loc, err := time.LoadLocation("America/Hermosillo")
+	if err != nil {
+		loc = time.FixedZone("UTC-7", -7*60*60) // Fallback si tzdata no está disponible
+	}
+	now := time.Now().In(loc)
+	if now.Hour() < 11 || now.Hour() >= 23 {
+		log.Printf("Message received outside business hours from %s", phone)
+		SendWhatsAppMessage(phone, "¡Hola! Gracias por comunicarte con Sushi Los Plebes. 🍣\n\nActualmente nuestro restaurante se encuentra cerrado. Nuestro horario de atención es todos los días de 11:00 AM a 11:00 PM.\n\nPor favor contáctanos mañana en horario laboral y con gusto tomaremos tu pedido. ¡Que pases buena noche! 🌙")
+		return // Do not process state, stop right here
+	}
 	
 	decision, err := CallGemini(phone, text)
 	if err != nil {
 		log.Printf("ERROR from Gemini: %v", err)
-		SendWhatsAppMessage(phone, "¡Ups! Ocurrió un error procesando tu mensaje. Intenta de nuevo.")
+		SendWhatsAppMessage(phone, "Estamos un poco saturados recibiendo pedidos en este momento. 🍣 Por favor, vuelve a escribirnos en 5 minutos. ¡Agradecemos tu paciencia! 🙏")
 		return
 	}
 
