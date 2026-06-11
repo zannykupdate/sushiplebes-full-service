@@ -121,11 +121,11 @@ func SendWhatsAppImage(phone string, imageUrl string) error {
 func ProcessMessage(phone string, text string) {
 	log.Printf("Bot received message from %s: %s", phone, text)
 
-	// Horario de atención: 11:00 AM a 11:00 PM (Hora Hermosillo / UTC-7)
+	// Horario de atención: 11:00 AM a 03:00 AM (Hora Hermosillo / UTC-7)
 	now := time.Now().In(hermosilloLock)
-	if now.Hour() < 11 || now.Hour() >= 23 {
+	if now.Hour() >= 3 && now.Hour() < 11 {
 		log.Printf("Message received outside business hours from %s", phone)
-		SendWhatsAppMessage(phone, "¡Hola! Gracias por comunicarte con Sushi Los Plebes. 🍣\n\nActualmente nuestro restaurante se encuentra cerrado. Nuestro horario de atención es todos los días de 11:00 AM a 11:00 PM.\n\nPor favor contáctanos mañana en horario laboral y con gusto tomaremos tu pedido. ¡Que pases buena noche! 🌙")
+		SendWhatsAppMessage(phone, "¡Hola! Gracias por comunicarte con Sushi Los Plebes. 🍣\n\nActualmente nuestro restaurante se encuentra cerrado. Nuestro horario de atención es todos los días de 11:00 AM a 03:00 AM.\n\nPor favor contáctanos mañana en horario laboral y con gusto tomaremos tu pedido. ¡Que pases buena noche! 🌙")
 		return // Do not process state, stop right here
 	}
 	
