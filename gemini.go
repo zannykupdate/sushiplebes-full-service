@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/oauth2/google"
 	"github.com/shopspring/decimal"
 )
 
@@ -184,17 +185,43 @@ func init() {
 
 var globalHTTPClient = &http.Client{Timeout: 15 * time.Second}
 
-func callGeminiWithModel(model string, apiKey string, requestBody GeminiRequest) ([]byte, int, error) {
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, apiKey)
+func callGeminiWithModel(model string, requestBody GeminiRequest) ([]byte, int, error) {
 	jsonData, err := json.Marshal(requestBody)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, 0, err
+	var url string
+	var req *http.Request
+
+	if AppConfig.GCPServiceJSON != "" && AppConfig.GCPProjectID != "" {
+		// Modo Vertex AI (Oauth2)
+		url = fmt.Sprintf("https://us-central1-aiplatform.googleapis.com/v1/projects/%s/locations/us-central1/publishers/google/models/%s:generateContent", AppConfig.GCPProjectID, model)
+		req, err = http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+		if err != nil {
+			return nil, 0, err
+		}
+		
+		creds, err := google.CredentialsFromJSON(context.Background(), []byte(AppConfig.GCPServiceJSON), "https://www.googleapis.com/auth/cloud-platform")
+		if err != nil {
+			return nil, 0, fmt.Errorf("error cargando credenciales de vertex: %v", err)
+		}
+		token, err := creds.TokenSource.Token()
+		if err != nil {
+			return nil, 0, fmt.Errorf("error obteniendo token de vertex: %v", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+token.AccessToken)
+	} else if AppConfig.GeminiAPIKey != "" {
+		// Modo AI Studio (API Key)
+		url = fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, AppConfig.GeminiAPIKey)
+		req, err = http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+		if err != nil {
+			return nil, 0, err
+		}
+	} else {
+		return nil, 0, fmt.Errorf("no hay credenciales configuradas (ni api key ni gcp json)")
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := globalHTTPClient.Do(req)
@@ -208,9 +235,8 @@ func callGeminiWithModel(model string, apiKey string, requestBody GeminiRequest)
 }
 
 func CallGemini(phone string, userMessage string) (GeminiDecision, error) {
-	apiKey := AppConfig.GeminiAPIKey
-	if apiKey == "" {
-		return GeminiDecision{}, fmt.Errorf("GEMINI_API_KEY no configurado")
+	if AppConfig.GeminiAPIKey == "" && (AppConfig.GCPServiceJSON == "" || AppConfig.GCPProjectID == "") {
+		return GeminiDecision{}, fmt.Errorf("ni GEMINI_API_KEY, ni configuraciones de GCP para Vertex están configuradas")
 	}
 
 	// Agregar a historial muy básico (limitar a últimos 500 chars para no crecer infinito)
@@ -255,13 +281,19 @@ func CallGemini(phone string, userMessage string) (GeminiDecision, error) {
 	}
 
 	// Fallback strategy to handle latest models in 2026
-	modelsToTry := []string{"gemini-3.5-flash", "gemini-flash-latest", "gemini-2.5-flash"}
+	modelsToTry := []string{"gemini-3.5-flash", "gemini-flash-latest", "gemini-1.5-flash"}
+	
+	if AppConfig.GCPServiceJSON != "" {
+		// En Vertex los nombres son más estrictos
+		modelsToTry = []string{"gemini-1.5-flash-001", "gemini-1.5-flash-002", "gemini-1.5-flash"}
+	}
+
 	var bodyBytes []byte
 	var statusCode int
 	var err error
 
 	for _, model := range modelsToTry {
-		bodyBytes, statusCode, err = callGeminiWithModel(model, apiKey, reqData)
+		bodyBytes, statusCode, err = callGeminiWithModel(model, reqData)
 		if err != nil {
 			return GeminiDecision{}, err
 		}

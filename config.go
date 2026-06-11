@@ -12,6 +12,8 @@ type Config struct {
 	WhatsAppVerifyToken string
 	WhatsAppAppSecret   string
 	GeminiAPIKey        string
+	GCPProjectID        string
+	GCPServiceJSON      string
 	DatabaseURL         string
 	FrontendURL         string
 	MenuImageURL        string
@@ -29,6 +31,8 @@ func LoadConfig() {
 		WhatsAppVerifyToken: strings.TrimSpace(strings.Trim(os.Getenv("WHATSAPP_VERIFY_TOKEN"), "\"")),
 		WhatsAppAppSecret:   strings.TrimSpace(strings.Trim(os.Getenv("WHATSAPP_APP_SECRET"), "\"")),
 		GeminiAPIKey:        strings.TrimSpace(strings.Trim(os.Getenv("GEMINI_API_KEY"), "\"")),
+		GCPProjectID:        strings.TrimSpace(strings.Trim(os.Getenv("GCP_PROJECT_ID"), "\"")),
+		GCPServiceJSON:      strings.TrimSpace(os.Getenv("GCP_SERVICE_ACCOUNT_JSON")),
 		DatabaseURL:         strings.TrimSpace(strings.Trim(os.Getenv("DATABASE_URL"), "\"")),
 		FrontendURL:         strings.TrimSpace(strings.Trim(os.Getenv("FRONTEND_URL"), "\"")),
 		MenuImageURL:        strings.TrimSpace(strings.Trim(os.Getenv("MENU_IMAGE_URL"), "\"")),

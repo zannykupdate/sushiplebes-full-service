@@ -111,6 +111,8 @@ func crearTablasAutomaticas() {
 		DB.Exec(context.Background(), "ALTER TABLE earnings ADD COLUMN created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP")
 		
 		// Añadir validación de inventario negativo
+		// Antes de añadir el constraint, asegurarnos de que no haya valores negativos que lo bloqueen
+		DB.Exec(context.Background(), "UPDATE inventory SET quantity = 0 WHERE quantity < 0")
 		_, errConstraint := DB.Exec(context.Background(), "ALTER TABLE inventory ADD CONSTRAINT check_qty_positive CHECK (quantity >= 0)")
 		if errConstraint != nil {
 			log.Printf("INFO: constraint check_qty_positive ya existe o fallo: %v", errConstraint)
