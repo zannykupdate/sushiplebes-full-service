@@ -5,7 +5,11 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 func basicAuth(next http.HandlerFunc) http.HandlerFunc {
@@ -16,14 +20,8 @@ func basicAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		user := strings.TrimSpace(strings.Trim(os.Getenv("ADMIN_USER"), "\""))
-		pass := strings.TrimSpace(strings.Trim(os.Getenv("ADMIN_PASS"), "\""))
-		
-		// If credentials are not set in the environment, fallback to a default or block
-		if user == "" || pass == "" {
-			user = "admin"
-			pass = "admin123" // Fallback default if not defined to ensure protection
-		}
+		user := AppConfig.AdminUser
+		pass := AppConfig.AdminPass
 
 		u, p, ok := r.BasicAuth()
 		if !ok || u != user || p != pass {
@@ -36,29 +34,24 @@ func basicAuth(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func main() {
-	databaseURL := strings.TrimSpace(strings.Trim(os.Getenv("DATABASE_URL"), "\""))
-	if databaseURL != "" {
-		InitDB(databaseURL)
-	} else {
-		log.Println("WARNING: DATABASE_URL no provista")
+	decimal.MarshalJSONWithoutQuotes = true
+	LoadConfig()
+
+	InitDB(AppConfig.DatabaseURL)
+	if DB == nil {
+		log.Fatal("ERROR CRÍTICO: No se puede operar sin conexión a PostgreSQL")
 	}
 
-	if DB != nil {
-		if err := DB.Ping(context.Background()); err == nil {
-			log.Println("✅ Verificación de DB: Conexión y Ping exitosos antes de iniciar el servidor.")
-		} else {
-			log.Printf("⚠️ Verificación de DB: El Ping a la base de datos falló: %v\n", err)
-		}
+	if err := DB.Ping(context.Background()); err == nil {
+		log.Println("✅ Verificación de DB: Conexión y Ping exitosos antes de iniciar el servidor.")
 	} else {
-		log.Println("⚠️ Verificación de DB: Operando sin conexión a base de datos activa (DB es nil).")
+		log.Fatalf("CRITICAL ERROR: El Ping a la base de datos falló: %v\n", err)
 	}
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "3000"
-	}
+	port := AppConfig.Port
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+
 		if r.URL.Path == "/" {
 			http.Redirect(w, r, "/admin", http.StatusFound)
 			return
@@ -74,22 +67,62 @@ func main() {
 	http.HandleFunc("/monitor/stream", basicAuth(HandleMonitorStream))
 	http.HandleFunc("/admin", basicAuth(HandleAdminInterface))
 
+	// CORS preflight global para /api/ en adelante
+	http.HandleFunc("OPTIONS /api/", func(w http.ResponseWriter, r *http.Request) {
+		if enableCors(&w, r) {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+		}
+	})
+
 	// Protected API Routes
-	http.HandleFunc("/api/test_error", HandleTestGeminiError)
-	http.HandleFunc("/api/orders", basicAuth(HandleOrdersAPI))
-	http.HandleFunc("/api/inventory", basicAuth(HandleInventoryAPI))
-	http.HandleFunc("/api/dashboard", basicAuth(HandleDashboardAPI))
-	http.HandleFunc("/api/system_status", basicAuth(HandleSystemStatusAPI))
-	http.HandleFunc("/api/tickets", basicAuth(HandleTicketsAPI))
-	http.HandleFunc("/api/accounting", basicAuth(HandleAccountingAPI))
-	http.HandleFunc("/api/menu", basicAuth(HandleMenuAPI))
+	http.HandleFunc("GET /api/test_error", HandleTestGeminiError)
+	http.HandleFunc("GET /api/orders", basicAuth(GetOrdersAPI))
+	http.HandleFunc("POST /api/orders", basicAuth(CreateOrderAPI))
+	http.HandleFunc("PUT /api/orders", basicAuth(UpdateOrderAPI))
+	http.HandleFunc("DELETE /api/orders", basicAuth(DeleteOrderAPI))
+	
+	http.HandleFunc("GET /api/inventory", basicAuth(GetInventoryAPI))
+	http.HandleFunc("POST /api/inventory", basicAuth(CreateInventoryAPI))
+	http.HandleFunc("PUT /api/inventory", basicAuth(UpdateInventoryAPI))
+	http.HandleFunc("DELETE /api/inventory", basicAuth(DeleteInventoryAPI))
+	
+	http.HandleFunc("GET /api/dashboard", basicAuth(GetDashboardAPI))
+	http.HandleFunc("GET /api/system_status", basicAuth(GetSystemStatusAPI))
+	
+	http.HandleFunc("GET /api/tickets", basicAuth(GetTicketsAPI))
+	http.HandleFunc("PUT /api/tickets", basicAuth(UpdateTicketAPI))
+	
+	http.HandleFunc("GET /api/accounting", basicAuth(GetAccountingAPI))
+	http.HandleFunc("POST /api/accounting", basicAuth(CreateAccountingAPI))
+	
+	http.HandleFunc("GET /api/menu", basicAuth(GetMenuAPI))
+	http.HandleFunc("POST /api/menu", basicAuth(CreateMenuAPI))
+	http.HandleFunc("PUT /api/menu", basicAuth(UpdateMenuAPI))
+	http.HandleFunc("DELETE /api/menu", basicAuth(DeleteMenuAPI))
 
 	log.Println("⚡ Webhook escuchando en: http://localhost:" + port + "/webhook")
 	log.Println("🖥️ Monitor disponible en: http://localhost:" + port + "/monitor")
 	log.Println("📊 Panel Admin disponible en: http://localhost:" + port + "/admin")
 	
-	err := http.ListenAndServe("0.0.0.0:"+port, nil)
-	if err != nil {
-		log.Fatalf("CRITICAL ERROR: El servidor colapsó: %v\n", err)
+	srv := &http.Server{Addr: "0.0.0.0:" + port, Handler: nil}
+	
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("CRITICAL ERROR: El servidor colapsó: %v\n", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+
+	log.Println("Shutting down server gracefully...")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
 	}
+	log.Println("Server exiting")
 }

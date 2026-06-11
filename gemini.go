@@ -10,6 +10,10 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
+	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 type GeminiDecision struct {
@@ -21,10 +25,10 @@ type GeminiDecision struct {
 	OrderDetails      string         `json:"order_details"`
 	DeliveryAddress   string         `json:"delivery_address"`
 	PaymentMethod     string         `json:"payment_method"`
-	Subtotal          float64        `json:"subtotal"`
-	Shipping          float64        `json:"shipping"`
-	Tax               float64        `json:"tax"`
-	Total             float64        `json:"total"`
+	Subtotal          decimal.Decimal `json:"subtotal"`
+	Shipping          decimal.Decimal `json:"shipping"`
+	Tax               decimal.Decimal `json:"tax"`
+	Total             decimal.Decimal `json:"total"`
 	InventoryToRemove map[string]int `json:"inventory_to_remove"`
 }
 
@@ -62,7 +66,10 @@ type GeminiResponse struct {
 	} `json:"candidates"`
 }
 
-var dynamicBotPrompt string
+var (
+	dynamicBotPrompt string
+	promptMutex      sync.RWMutex
+)
 
 func UpdateGeminiPrompt() {
 	if DB == nil {
@@ -83,6 +90,7 @@ func UpdateGeminiPrompt() {
 		menuItemsStr = "- (No se pudo cargar el menú dinámico)\n"
 	}
 
+	promptMutex.Lock()
 	dynamicBotPrompt = fmt.Sprintf(`Eres el asistente virtual simpático y experto de SUSHI LOSPLEBES. 
 Tu objetivo es ayudar a los clientes a armar su orden de sushi paso a paso por WhatsApp.
 
@@ -146,9 +154,36 @@ ESTRUCTURA STRICTA MULTI-PROPOSITO (SIEMPRE RETORNA ESTE JSON):
   }
 }
 `
+	promptMutex.Unlock()
 }
 
-var chatMemory = make(map[string]string)
+type ChatSession struct {
+	History    string
+	LastUpdate time.Time
+}
+
+var (
+	chatMemoryMutex sync.RWMutex
+	chatMemory      = make(map[string]ChatSession)
+)
+
+func init() {
+	go func() {
+		for {
+			time.Sleep(1 * time.Hour) // Cada hora limpiar
+			chatMemoryMutex.Lock()
+			now := time.Now()
+			for phone, session := range chatMemory {
+				if now.Sub(session.LastUpdate) > 2*time.Hour {
+					delete(chatMemory, phone)
+				}
+			}
+			chatMemoryMutex.Unlock()
+		}
+	}()
+}
+
+var globalHTTPClient = &http.Client{Timeout: 15 * time.Second}
 
 func callGeminiWithModel(model string, apiKey string, requestBody GeminiRequest) ([]byte, int, error) {
 	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, apiKey)
@@ -163,8 +198,7 @@ func callGeminiWithModel(model string, apiKey string, requestBody GeminiRequest)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := globalHTTPClient.Do(req)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -175,26 +209,39 @@ func callGeminiWithModel(model string, apiKey string, requestBody GeminiRequest)
 }
 
 func CallGemini(phone string, userMessage string) (GeminiDecision, error) {
-	apiKey := strings.TrimSpace(strings.Trim(os.Getenv("GEMINI_API_KEY"), "\""))
+	apiKey := AppConfig.GeminiAPIKey
 	if apiKey == "" {
 		return GeminiDecision{}, fmt.Errorf("GEMINI_API_KEY no configurado")
 	}
 
 	// Agregar a historial muy básico (limitar a últimos 500 chars para no crecer infinito)
-	historial := chatMemory[phone]
+	chatMemoryMutex.Lock()
+	session := chatMemory[phone]
+	historial := session.History
 	historial += "\nCliente: " + userMessage
 	if len(historial) > 1000 {
 		historial = historial[len(historial)-1000:]
 	}
-	chatMemory[phone] = historial
+	chatMemory[phone] = ChatSession{
+		History:    historial,
+		LastUpdate: time.Now(),
+	}
+	chatMemoryMutex.Unlock()
 
-	if dynamicBotPrompt == "" {
+	promptMutex.RLock()
+	currentPrompt := dynamicBotPrompt
+	promptMutex.RUnlock()
+
+	if currentPrompt == "" {
 		UpdateGeminiPrompt()
+		promptMutex.RLock()
+		currentPrompt = dynamicBotPrompt
+		promptMutex.RUnlock()
 	}
 
 	reqData := GeminiRequest{
 		SystemInstruction: &SystemInst{
-			Parts: []Part{{Text: dynamicBotPrompt}},
+			Parts: []Part{{Text: currentPrompt}},
 		},
 		Contents: []MessageContent{
 			{
@@ -263,12 +310,18 @@ func CallGemini(phone string, userMessage string) (GeminiDecision, error) {
 	}
 
 	// Almacenar respuesta del bot en el historial para contexto
-	chatMemory[phone] += "\nBot: " + decision.ResponseText
+	chatMemoryMutex.Lock()
+	session = chatMemory[phone]
+	session.History += "\nBot: " + decision.ResponseText
+	session.LastUpdate = time.Now()
 
 	if decision.IsOrderComplete {
 		// Limpiar el historial una vez completada la orden para futuras ordens
 		delete(chatMemory, phone)
+	} else {
+		chatMemory[phone] = session
 	}
+	chatMemoryMutex.Unlock()
 
 	return decision, nil
 }

@@ -10,11 +10,22 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
+var hermosilloLock *time.Location
+
+func init() {
+	loc, err := time.LoadLocation("America/Hermosillo")
+	if err != nil {
+		loc = time.FixedZone("UTC-7", -7*60*60) // Fallback si tzdata no está disponible
+	}
+	hermosilloLock = loc
+}
+
 func SendWhatsAppMessage(phone string, message string) error {
-	token := strings.TrimSpace(strings.Trim(os.Getenv("WHATSAPP_ACCESS_TOKEN"), "\""))
-	phoneNumberID := strings.TrimSpace(strings.Trim(os.Getenv("WHATSAPP_PHONE_ID"), "\"")) // ID del número de origen desde Meta
+	token := AppConfig.WhatsAppToken
+	phoneNumberID := AppConfig.WhatsAppPhoneID // ID del número de origen desde Meta
 
 	if token == "" || phoneNumberID == "" {
 		log.Println("WARNING: WHATSAPP_ACCESS_TOKEN o WHATSAPP_PHONE_ID no están configurados. No se enviará mensaje real.")
@@ -44,8 +55,7 @@ func SendWhatsAppMessage(phone string, message string) error {
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := globalHTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -64,8 +74,8 @@ func SendWhatsAppMessage(phone string, message string) error {
 }
 
 func SendWhatsAppImage(phone string, imageUrl string) error {
-	token := strings.TrimSpace(strings.Trim(os.Getenv("WHATSAPP_ACCESS_TOKEN"), "\""))
-	phoneNumberID := strings.TrimSpace(strings.Trim(os.Getenv("WHATSAPP_PHONE_ID"), "\""))
+	token := AppConfig.WhatsAppToken
+	phoneNumberID := AppConfig.WhatsAppPhoneID
 
 	if token == "" || phoneNumberID == "" || imageUrl == "" {
 		return fmt.Errorf("credenciales faltantes o url vacia")
@@ -94,8 +104,7 @@ func SendWhatsAppImage(phone string, imageUrl string) error {
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := globalHTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -115,11 +124,7 @@ func ProcessMessage(phone string, text string) {
 	log.Printf("Bot received message from %s: %s", phone, text)
 
 	// Horario de atención: 11:00 AM a 11:00 PM (Hora Hermosillo / UTC-7)
-	loc, err := time.LoadLocation("America/Hermosillo")
-	if err != nil {
-		loc = time.FixedZone("UTC-7", -7*60*60) // Fallback si tzdata no está disponible
-	}
-	now := time.Now().In(loc)
+	now := time.Now().In(hermosilloLock)
 	if now.Hour() < 11 || now.Hour() >= 23 {
 		log.Printf("Message received outside business hours from %s", phone)
 		SendWhatsAppMessage(phone, "¡Hola! Gracias por comunicarte con Sushi Los Plebes. 🍣\n\nActualmente nuestro restaurante se encuentra cerrado. Nuestro horario de atención es todos los días de 11:00 AM a 11:00 PM.\n\nPor favor contáctanos mañana en horario laboral y con gusto tomaremos tu pedido. ¡Que pases buena noche! 🌙")
@@ -138,7 +143,7 @@ func ProcessMessage(phone string, text string) {
 
 	// Enviamos imagen del menú si Gemini lo decide
 	if decision.SendMenuImage {
-		menuUrl := strings.TrimSpace(strings.Trim(os.Getenv("MENU_IMAGE_URL"), "\""))
+		menuUrl := AppConfig.MenuImageURL
 		if menuUrl == "" {
 			// Placeholder si no está configurado
 			menuUrl = "https://i.imgur.com/3q17vT9.jpeg" // Imagen ejemplo de sushi

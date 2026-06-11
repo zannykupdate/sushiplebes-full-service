@@ -14,7 +14,7 @@ import (
 
 func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
-		verifyToken := strings.TrimSpace(strings.Trim(os.Getenv("WHATSAPP_VERIFY_TOKEN"), "\""))
+		verifyToken := AppConfig.WhatsAppVerifyToken
 		mode := r.URL.Query().Get("hub.mode")
 		token := r.URL.Query().Get("hub.verify_token")
 		challenge := r.URL.Query().Get("hub.challenge")
@@ -36,7 +36,7 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		appSecret := strings.TrimSpace(strings.Trim(os.Getenv("WHATSAPP_APP_SECRET"), "\""))
+		appSecret := AppConfig.WhatsAppAppSecret
 		if appSecret != "" {
 			signature := r.Header.Get("X-Hub-Signature-256")
 			if signature == "" || len(signature) <= 7 || signature[:7] != "sha256=" {
@@ -86,7 +86,7 @@ func WebhookHandler(w http.ResponseWriter, r *http.Request) {
 						
 						// Si logramos extraer número y texto, procesamos el mensaje real
 						if phone != "" && text != "" {
-							ProcessMessage(phone, text)
+							go ProcessMessage(phone, text)
 							w.WriteHeader(http.StatusOK)
 							return
 						}

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/shopspring/decimal"
 )
 
 var DB *pgxpool.Pool
@@ -109,6 +110,12 @@ func crearTablasAutomaticas() {
 		DB.Exec(context.Background(), "ALTER TABLE orders ADD COLUMN created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP")
 		DB.Exec(context.Background(), "ALTER TABLE earnings ADD COLUMN created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP")
 		
+		// Añadir validación de inventario negativo
+		_, errConstraint := DB.Exec(context.Background(), "ALTER TABLE inventory ADD CONSTRAINT check_qty_positive CHECK (quantity >= 0)")
+		if errConstraint != nil {
+			log.Printf("INFO: constraint check_qty_positive ya existe o fallo: %v", errConstraint)
+		}
+		
 		// Llenar inventario para al menos 10 sushis si está vacío o para pruebas
 		seedInventory(DB)
 
@@ -165,30 +172,57 @@ func seedInventory(db *pgxpool.Pool) {
 		}
 		log.Println("✅ MENÚ SEMBRADO")
 	}
+
+	// Forzado de reseteo de inventario a 10.
+	db.Exec(context.Background(), "UPDATE inventory SET quantity = 10")
+	log.Println("🚀 INVENTARIO RESETEADO A 10 (HARD RESET)")
 }
 
-func InsertOrder(ctx context.Context, nombre, telefono, detalles, direccion, pago string, subtotal, tax, shipping, total float64, inventoryToRemove map[string]int) (int, error) {
+func InsertOrder(ctx context.Context, nombre, telefono, detalles, direccion, pago string, subtotal, tax, shipping, total decimal.Decimal, inventoryToRemove map[string]int) (int, error) {
+	tx, err := DB.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx)
+
 	var id int
-	err := DB.QueryRow(ctx, "INSERT INTO orders (nombre, telefono, detalles_orden, direccion_entrega, metodo_pago, subtotal, tax, shipping, total) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
+	err = tx.QueryRow(ctx, "INSERT INTO orders (nombre, telefono, detalles_orden, direccion_entrega, metodo_pago, subtotal, tax, shipping, total) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
 		nombre, telefono, detalles, direccion, pago, subtotal, tax, shipping, total).Scan(&id)
 	
-	if err == nil {
-		// impactar ganancias
-		DB.Exec(ctx, "INSERT INTO earnings (amount, order_id) VALUES ($1, $2)", total, id)
-		
-		// Descontar inventario estructurado por Gemini
-		for item, count := range inventoryToRemove {
-			// Update the quantity if the item exists
-			query := `
-				UPDATE inventory 
-				SET quantity = quantity - $1 
-				WHERE item = $2`
-			tag, errExec := DB.Exec(ctx, query, count, item)
-			if errExec == nil && tag.RowsAffected() == 0 {
-			    // If it didn't exist, we add it with negative quantity as a fallback.
-			    DB.Exec(ctx, "INSERT INTO inventory (item, quantity) VALUES ($1, $2)", item, -count)
+	if err != nil {
+		return 0, err
+	}
+
+	// impactar ganancias
+	_, err = tx.Exec(ctx, "INSERT INTO earnings (amount, order_id) VALUES ($1, $2)", total, id)
+	if err != nil {
+		return 0, err
+	}
+	
+	// Descontar inventario estructurado por Gemini
+	for item, count := range inventoryToRemove {
+		// Update the quantity if the item exists
+		query := `
+			UPDATE inventory 
+			SET quantity = quantity - $1 
+			WHERE item = $2`
+		tag, errExec := tx.Exec(ctx, query, count, item)
+		if errExec != nil {
+			return 0, errExec
+		}
+		if tag.RowsAffected() == 0 {
+			// If it didn't exist, we add it with negative quantity as a fallback.
+			_, errExec = tx.Exec(ctx, "INSERT INTO inventory (item, quantity) VALUES ($1, $2)", item, -count)
+			if errExec != nil {
+				return 0, errExec
 			}
 		}
 	}
-	return id, err
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	return id, nil
 }

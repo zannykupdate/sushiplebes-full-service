@@ -15,7 +15,9 @@ type SystemError struct {
 }
 
 var (
-	errorHistory []SystemError
+	errorHistory []SystemError = make([]SystemError, 50)
+	errorCount   int           = 0
+	errorRingPos int           = 0
 	errorMutex   sync.Mutex
 	maxErrors    = 50
 	
@@ -42,16 +44,16 @@ func LogSystemError(errType string, message string, details string, statusCode i
 	errorMutex.Lock()
 	defer errorMutex.Unlock()
 
-	errorHistory = append([]SystemError{{
+	errorHistory[errorRingPos] = SystemError{
 		Timestamp:  time.Now(),
 		Type:       errType,
 		Message:    message,
 		Details:    details,
 		StatusCode: statusCode,
-	}}, errorHistory...)
-
-	if len(errorHistory) > maxErrors {
-		errorHistory = errorHistory[:maxErrors]
+	}
+	errorRingPos = (errorRingPos + 1) % maxErrors
+	if errorCount < maxErrors {
+		errorCount++
 	}
 }
 
@@ -59,8 +61,10 @@ func GetSystemErrors() []SystemError {
 	errorMutex.Lock()
 	defer errorMutex.Unlock()
 	
-	// Return a copy
-	res := make([]SystemError, len(errorHistory))
-	copy(res, errorHistory)
+	res := make([]SystemError, 0, errorCount)
+	for i := 0; i < errorCount; i++ {
+		idx := (errorRingPos - 1 - i + maxErrors) % maxErrors
+		res = append(res, errorHistory[idx])
+	}
 	return res
 }
