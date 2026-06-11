@@ -8,8 +8,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"strings"
 )
 
 func WebhookHandler(w http.ResponseWriter, r *http.Request) {
